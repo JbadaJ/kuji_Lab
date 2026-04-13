@@ -24,3 +24,22 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ── Simulator animations ──────────────────────────────────────────────────── */
+
+@keyframes kuji-sparkle {
+  0%   { transform: translate(0, 0) scale(0); opacity: 1; }
+  60%  { opacity: 1; }
+  100% { transform: translate(var(--tx, 0px), var(--ty, 0px)) scale(0.4); opacity: 0; }
+}
+
+@keyframes kuji-flash {
+  0%   { opacity: 0; }
+  15%  { opacity: 0.55; }
+  100% { opacity: 0; }
+}
+
+@keyframes kuji-shine {
+  0%   { left: -80%; }
+  100% { left: 160%; }
+}
