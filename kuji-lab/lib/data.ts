@@ -12,6 +12,10 @@ function loadAll(): KujiProduct[] {
   return _cache
 }
 
+export function clearCache(): void {
+  _cache = null
+}
+
 export function getValidProducts(): KujiProduct[] {
   return loadAll().filter(p => !!p.title)
 }

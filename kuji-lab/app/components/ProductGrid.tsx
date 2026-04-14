@@ -223,13 +223,32 @@ function IpSelectorPanel({ selected, onSelect, onClose, availableIds }: IpPanelP
 
 export default function ProductGrid({ products, years }: Props) {
   const { t, locale } = useLanguage()
-  const [query, setQuery] = useState('')
-  const [yearFilter, setYearFilter] = useState('all')
-  const [monthFilter, setMonthFilter] = useState('all')
-  const [saleFilter, setSaleFilter] = useState('all')
-  const [ipFilter, setIpFilter] = useState('')
+
+  // URL 파라미터에서 초기값 읽기 (클라이언트 전용 lazy init)
+  const [query, setQuery] = useState(() =>
+    typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('q') ?? '') : '')
+  const [yearFilter, setYearFilter] = useState(() =>
+    typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('year') ?? 'all') : 'all')
+  const [monthFilter, setMonthFilter] = useState(() =>
+    typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('month') ?? 'all') : 'all')
+  const [saleFilter, setSaleFilter] = useState(() =>
+    typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('type') ?? 'all') : 'all')
+  const [ipFilter, setIpFilter] = useState(() =>
+    typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('ip') ?? '') : '')
   const [ipPanelOpen, setIpPanelOpen] = useState(false)
   const [page, setPage] = useState(1)
+
+  // 필터 상태 → URL 동기화 (뒤로가기 시 상태 복원용)
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (query) params.set('q', query)
+    if (yearFilter !== 'all') params.set('year', yearFilter)
+    if (monthFilter !== 'all') params.set('month', monthFilter)
+    if (saleFilter !== 'all') params.set('type', saleFilter)
+    if (ipFilter) params.set('ip', ipFilter)
+    const qs = params.toString()
+    window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
+  }, [query, yearFilter, monthFilter, saleFilter, ipFilter])
   const ipButtonRef = useRef<HTMLDivElement>(null)
 
   const fuse = useMemo(

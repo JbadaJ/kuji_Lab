@@ -13,6 +13,7 @@ interface Ticket {
   prize: Prize
   grade: string
   drawn: boolean
+  preset: boolean   // true = pre-drawn via setup config
 }
 
 interface SparkleData {
@@ -47,17 +48,41 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-function buildTickets(prizes: Prize[]): Ticket[] {
-  const lastOnePrize = prizes.find(p => getPrizeGrade(p) === 'ラストワン賞')
+interface SimulatorConfig {
+  mode: 'default' | 'random' | 'custom'
+  preDrawn: Record<string, number>   // grade → already-drawn count
+  drawLimit: number | null           // null = unlimited
+}
+
+function buildPool(prizes: Prize[]): { regular: Prize[]; factor: number } {
   const regular = prizes.filter(p => getPrizeGrade(p) !== 'ラストワン賞')
   const totalWeight = regular.reduce((s, _, i) => s + i + 1, 0)
   const factor = totalWeight > 0 ? Math.max(1, Math.round(80 / totalWeight)) : 1
+  return { regular, factor }
+}
+
+function getGradeCounts(prizes: Prize[]): Array<{ prize: Prize; grade: string; total: number }> {
+  const { regular, factor } = buildPool(prizes)
+  return regular.map((prize, i) => ({
+    prize,
+    grade: getPrizeGrade(prize),
+    total: (i + 1) * factor,
+  }))
+}
+
+function buildTickets(prizes: Prize[], preDrawn: Record<string, number> = {}): Ticket[] {
+  const { regular, factor } = buildPool(prizes)
   const pool: Prize[] = []
   regular.forEach((p, i) => {
     for (let j = 0; j < (i + 1) * factor; j++) pool.push(p)
   })
-  if (lastOnePrize) pool.push(lastOnePrize)
-  return shuffle(pool).map((prize, id) => ({ id, prize, grade: getPrizeGrade(prize), drawn: false }))
+  const gradeRemaining = { ...preDrawn }
+  return shuffle(pool).map((prize, id) => {
+    const grade = getPrizeGrade(prize)
+    const shouldBeDrawn = (gradeRemaining[grade] ?? 0) > 0
+    if (shouldBeDrawn) gradeRemaining[grade]--
+    return { id, prize, grade, drawn: shouldBeDrawn, preset: shouldBeDrawn }
+  })
 }
 
 // ── Grade styles ──────────────────────────────────────────────────────────────
@@ -112,6 +137,252 @@ function generateSparkles(grade: string): SparkleData[] {
   })
 }
 
+// ── SetupScreen ───────────────────────────────────────────────────────────────
+
+function SetupScreen({ product, prizes, onStart, onClose }: {
+  product: KujiProduct
+  prizes: Prize[]
+  onStart: (config: SimulatorConfig) => void
+  onClose: () => void
+}) {
+  const [mode, setMode] = useState<SimulatorConfig['mode']>('default')
+  const [preDrawn, setPreDrawn] = useState<Record<string, number>>({})
+  const [limitEnabled, setLimitEnabled] = useState(false)
+  const [drawLimit, setDrawLimit] = useState(10)
+
+  const gradeCounts = useMemo(() => getGradeCounts(prizes), [prizes])
+  const totalPool = useMemo(() => gradeCounts.reduce((s, g) => s + g.total, 0), [gradeCounts])
+
+  const totalPreDrawn = mode === 'custom'
+    ? gradeCounts.reduce((s, g) => s + (preDrawn[g.grade] ?? 0), 0)
+    : 0
+  const remaining = totalPool - totalPreDrawn
+  const actualDraws = limitEnabled ? Math.min(drawLimit, remaining) : remaining
+  const estimatedCost = product.price_yen ? actualDraws * product.price_yen : null
+
+  function setGradeCount(grade: string, val: number, max: number) {
+    setPreDrawn(prev => ({ ...prev, [grade]: Math.max(0, Math.min(max, val)) }))
+  }
+
+  function applyPreset(ratio: number) {
+    const next: Record<string, number> = {}
+    for (const { grade, total } of gradeCounts) next[grade] = Math.round(total * ratio)
+    setPreDrawn(next)
+  }
+
+  function handleStart() {
+    let finalPreDrawn: Record<string, number> = {}
+    if (mode === 'custom') {
+      finalPreDrawn = { ...preDrawn }
+    } else if (mode === 'random') {
+      for (const { grade, total } of gradeCounts) {
+        // 낮은 쪽으로 가중 — 너무 많이 뽑힌 상태 방지
+        const r = Math.random() * Math.random()
+        finalPreDrawn[grade] = Math.floor(r * (total + 1))
+      }
+    }
+    onStart({ mode, preDrawn: finalPreDrawn, drawLimit: limitEnabled ? drawLimit : null })
+  }
+
+  const MODES: { id: SimulatorConfig['mode']; label: string; sub: string }[] = [
+    { id: 'default', label: '기본',     sub: '전체 티켓으로 처음부터' },
+    { id: 'random',  label: '랜덤',     sub: '이미 뽑힌 수 무작위' },
+    { id: 'custom',  label: '상세 설정', sub: '등급별 직접 설정' },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950 text-zinc-100">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 flex-shrink-0">
+        <button onClick={onClose} className="text-zinc-400 hover:text-white transition-colors">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] text-zinc-500 uppercase tracking-widest">뽑기 설정</p>
+          <p className="text-sm font-semibold truncate">{product.title}</p>
+        </div>
+        {product.price_yen && (
+          <span className="text-xs text-zinc-500 flex-shrink-0">1회 ¥{product.price_yen.toLocaleString('ja-JP')}</span>
+        )}
+      </div>
+
+      {/* Scrollable body */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
+
+          {/* Mode cards */}
+          <div>
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">시작 방식</p>
+            <div className="grid grid-cols-3 gap-2">
+              {MODES.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => setMode(m.id)}
+                  className={`flex flex-col items-center gap-1 p-4 rounded-xl border-2 transition-all text-center ${
+                    mode === m.id
+                      ? 'border-orange-500 bg-orange-500/10'
+                      : 'border-zinc-800 bg-zinc-900 hover:border-zinc-600'
+                  }`}
+                >
+                  <span className="text-sm font-bold">{m.label}</span>
+                  <span className="text-[10px] text-zinc-400 leading-tight">{m.sub}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Random description */}
+          {mode === 'random' && (
+            <div className="rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3">
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                시작 시 각 등급의 티켓 일부가 이미 뽑혀있는 상태로 시작합니다. 뽑을수록 희귀 상품 확률이 올라가는 상황을 시뮬레이션합니다.
+              </p>
+            </div>
+          )}
+
+          {/* Custom: grade table */}
+          {mode === 'custom' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">등급별 이미 뽑힌 수</p>
+                <div className="flex gap-1">
+                  {([['초기화', 0], ['25%', 0.25], ['50%', 0.5], ['75%', 0.75]] as [string, number][]).map(([label, ratio]) => (
+                    <button
+                      key={label}
+                      onClick={() => applyPreset(ratio)}
+                      className="text-[10px] px-2 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-zinc-900 border border-zinc-800 overflow-hidden divide-y divide-zinc-800/70">
+                {gradeCounts.map(({ prize, grade, total }) => {
+                  const count = preDrawn[grade] ?? 0
+                  const style = GRADE_STYLE[grade] ?? DEFAULT_STYLE
+                  return (
+                    <div key={grade} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className={`text-xs font-black w-6 text-center flex-shrink-0 ${style.badge.includes('text-') ? '' : 'text-white'} ${style.badge} px-1.5 py-0.5 rounded-full`}>
+                        {getGradeLetter(grade)}
+                      </span>
+                      <span className="text-xs text-zinc-400 truncate flex-1 min-w-0">{prize.name}</span>
+                      <span className="text-[10px] text-zinc-600 flex-shrink-0 tabular-nums">{total}장 중</span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                          onClick={() => setGradeCount(grade, count - 1, total)}
+                          disabled={count === 0}
+                          className="w-6 h-6 rounded-md bg-zinc-800 hover:bg-zinc-700 disabled:opacity-25 flex items-center justify-center text-zinc-200 font-bold text-sm transition-colors"
+                        >−</button>
+                        <span className={`w-6 text-center text-sm font-bold tabular-nums ${count > 0 ? 'text-orange-400' : 'text-zinc-500'}`}>
+                          {count}
+                        </span>
+                        <button
+                          onClick={() => setGradeCount(grade, count + 1, total)}
+                          disabled={count === total}
+                          className="w-6 h-6 rounded-md bg-zinc-800 hover:bg-zinc-700 disabled:opacity-25 flex items-center justify-center text-zinc-200 font-bold text-sm transition-colors"
+                        >+</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {totalPreDrawn > 0 && (
+                <p className="text-xs text-zinc-500 text-center">
+                  {totalPreDrawn}장 이미 뽑힘 → 남은 티켓 <span className="text-white font-semibold">{remaining}</span>장
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Draw limit */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">이번 세션 뽑기 횟수</p>
+            <div className="rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">횟수 제한</p>
+                  <p className="text-xs text-zinc-500 mt-0.5">설정한 횟수만큼만 뽑고 자동 종료</p>
+                </div>
+                <button
+                  onClick={() => setLimitEnabled(v => !v)}
+                  className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${limitEnabled ? 'bg-orange-500' : 'bg-zinc-700'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${limitEnabled ? 'left-[22px]' : 'left-1'}`} />
+                </button>
+              </div>
+
+              {limitEnabled && (
+                <div className="flex items-center gap-3 pt-2 border-t border-zinc-800">
+                  <span className="text-sm text-zinc-400">뽑을 횟수</span>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button
+                      onClick={() => setDrawLimit(v => Math.max(1, v - 1))}
+                      className="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-200 font-bold"
+                    >−</button>
+                    <input
+                      type="number"
+                      value={drawLimit}
+                      min={1}
+                      onChange={e => setDrawLimit(Math.max(1, Math.min(remaining || 1, Number(e.target.value) || 1)))}
+                      className="w-14 text-center bg-zinc-800 rounded-lg py-1 text-sm font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                    <button
+                      onClick={() => setDrawLimit(v => Math.min(remaining || v + 1, v + 1))}
+                      className="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-200 font-bold"
+                    >+</button>
+                    <span className="text-sm text-zinc-500">회</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="border-t border-zinc-800 px-4 py-4 bg-zinc-950 flex-shrink-0">
+        <div className="max-w-lg mx-auto space-y-2.5">
+          {/* Preview stats */}
+          <div className="flex items-center justify-center gap-3 text-sm flex-wrap">
+            <span className="text-zinc-500">
+              남은 티켓 <span className="text-white font-bold tabular-nums">{remaining}</span>장
+            </span>
+            {limitEnabled && remaining > 0 && (
+              <>
+                <span className="text-zinc-700">·</span>
+                <span className="text-zinc-500">
+                  이번 세션 <span className="text-orange-400 font-bold tabular-nums">{Math.min(drawLimit, remaining)}</span>회
+                </span>
+              </>
+            )}
+            {estimatedCost !== null && (
+              <>
+                <span className="text-zinc-700">·</span>
+                <span className="text-zinc-500">
+                  예상 비용 <span className="text-amber-400 font-bold tabular-nums">¥{estimatedCost.toLocaleString('ja-JP')}</span>
+                </span>
+              </>
+            )}
+          </div>
+
+          <button
+            onClick={handleStart}
+            disabled={remaining === 0}
+            className="w-full py-3.5 rounded-full bg-orange-500 hover:bg-orange-400 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-bold text-sm transition-colors shadow-lg active:scale-[0.98]"
+          >
+            {remaining === 0 ? '뽑을 티켓이 없습니다' : '시작하기'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── TicketFront (reusable orange ticket face) ─────────────────────────────────
 
 function TicketFront({ small = false }: { small?: boolean }) {
@@ -157,8 +428,10 @@ function TicketFront({ small = false }: { small?: boolean }) {
 // ── TicketCard (board tile) ───────────────────────────────────────────────────
 
 function TicketCard({ ticket, onReveal }: { ticket: Ticket; onReveal: (t: Ticket) => void }) {
-  const [flipped, setFlipped] = useState(false)
-  const wasDrawn = useRef(false)
+  // 프리셋으로 이미 뽑혀있던 티켓인지 마운트 시점에 기록
+  const isPreset = useRef(ticket.drawn)
+  const [flipped, setFlipped] = useState(ticket.drawn)
+  const wasDrawn = useRef(ticket.drawn)
 
   useEffect(() => {
     if (ticket.drawn && !wasDrawn.current) {
@@ -179,6 +452,7 @@ function TicketCard({ ticket, onReveal }: { ticket: Ticket; onReveal: (t: Ticket
           transformStyle: 'preserve-3d',
           transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
           transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+          opacity: 1,
         } as React.CSSProperties}
       >
         {/* Front: orange ticket */}
@@ -191,9 +465,9 @@ function TicketCard({ ticket, onReveal }: { ticket: Ticket; onReveal: (t: Ticket
           <TicketFront small />
         </button>
 
-        {/* Back: grade letter only */}
+        {/* Back: grade letter */}
         <div
-          className="absolute inset-0 rounded-lg flex items-center justify-center shadow-md bg-black border-2 border-orange-500/60"
+          className="absolute inset-0 rounded-lg flex flex-col items-center justify-center gap-1 shadow-md bg-black border-2 border-orange-500/60"
           style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
         >
           <span className="font-black text-2xl sm:text-3xl leading-none select-none text-white">
@@ -442,44 +716,183 @@ function ResultToast({ prize, locale, onClose }: { prize: Prize; locale: string;
 
 // ── Drawn panel ───────────────────────────────────────────────────────────────
 
+function DrawnTicketRow({ tk, index }: { tk: Ticket; index: number }) {
+  const s = GRADE_STYLE[tk.grade] ?? DEFAULT_STYLE
+  const { locale } = useLanguage()
+  const label = translateGrade(tk.grade, locale as 'ko' | 'ja' | 'en')
+  return (
+    <div className="flex items-center gap-2 py-0.5">
+      <span className="text-[10px] text-zinc-600 w-4 flex-shrink-0 tabular-nums">{index}</span>
+      <div className={`w-5 h-5 flex-shrink-0 rounded flex items-center justify-center ${s.badge}`}>
+        <span className="text-[9px] font-black">{getGradeLetter(tk.grade)}</span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${s.badge}`}>{label}</span>
+        <p className="text-[10px] text-zinc-300 truncate mt-0.5">{tk.prize.name}</p>
+      </div>
+    </div>
+  )
+}
+
 function DrawnPanel({ drawn, locale }: { drawn: Ticket[]; locale: string }) {
-  const tally = useMemo(() => {
+  const sessionDrawn = useMemo(() => drawn.filter(tk => !tk.preset), [drawn])
+  const presetDrawn  = useMemo(() => drawn.filter(tk => tk.preset),  [drawn])
+
+  const sessionTally = useMemo(() => {
     const map = new Map<string, number>()
-    for (const tk of drawn) map.set(tk.grade, (map.get(tk.grade) ?? 0) + 1)
+    for (const tk of sessionDrawn) map.set(tk.grade, (map.get(tk.grade) ?? 0) + 1)
     return [...map.entries()]
-  }, [drawn])
+  }, [sessionDrawn])
 
   return (
     <div className="flex flex-col gap-3 h-full overflow-hidden">
-      <div className="flex flex-wrap gap-1.5 flex-shrink-0">
-        {tally.map(([grade, count]) => {
-          const s = GRADE_STYLE[grade] ?? DEFAULT_STYLE
-          return (
-            <span key={grade} className={`text-xs px-2 py-0.5 rounded-full font-bold ${s.badge}`}>
-              {getGradeLetter(grade)} ×{count}
-            </span>
-          )
-        })}
-        {drawn.length === 0 && <span className="text-xs text-zinc-500">-</span>}
+      {/* Session draws */}
+      <div className="flex flex-col gap-2 flex-shrink-0">
+        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">
+          {locale === 'ko' ? '이번 뽑기' : locale === 'en' ? 'This session' : 'このセッション'} ({sessionDrawn.length})
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {sessionTally.map(([grade, count]) => {
+            const s = GRADE_STYLE[grade] ?? DEFAULT_STYLE
+            return (
+              <span key={grade} className={`text-xs px-2 py-0.5 rounded-full font-bold ${s.badge}`}>
+                {getGradeLetter(grade)} ×{count}
+              </span>
+            )
+          })}
+          {sessionDrawn.length === 0 && <span className="text-xs text-zinc-500">-</span>}
+        </div>
       </div>
+
       <div className="flex-1 overflow-y-auto flex flex-col gap-1 pr-1 min-h-0">
-        {[...drawn].reverse().map((tk, i) => {
-          const s = GRADE_STYLE[tk.grade] ?? DEFAULT_STYLE
-          const label = translateGrade(tk.grade, locale as 'ko' | 'ja' | 'en')
-          return (
-            <div key={tk.id} className="flex items-center gap-2 py-0.5">
-              <span className="text-[10px] text-zinc-600 w-4 flex-shrink-0 tabular-nums">{drawn.length - i}</span>
-              <div className={`w-5 h-5 flex-shrink-0 rounded flex items-center justify-center ${s.badge}`}>
-                <span className="text-[9px] font-black">{getGradeLetter(tk.grade)}</span>
-              </div>
-              <div className="min-w-0 flex-1">
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${s.badge}`}>{label}</span>
-                <p className="text-[10px] text-zinc-300 truncate mt-0.5">{tk.prize.name}</p>
-              </div>
-            </div>
-          )
-        })}
+        {[...sessionDrawn].reverse().map((tk, i) => (
+          <DrawnTicketRow key={tk.id} tk={tk} index={sessionDrawn.length - i} />
+        ))}
       </div>
+
+      {/* Preset draws */}
+      {presetDrawn.length > 0 && (
+        <div className="flex flex-col gap-1.5 flex-shrink-0 border-t border-zinc-700 pt-3">
+          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">
+            {locale === 'ko' ? '설정 뽑기' : locale === 'en' ? 'Pre-drawn' : '設定済み'} ({presetDrawn.length})
+          </p>
+          <div className="flex flex-col gap-1 max-h-32 overflow-y-auto pr-1">
+            {[...presetDrawn].reverse().map((tk, i) => (
+              <DrawnTicketRow key={tk.id} tk={tk} index={presetDrawn.length - i} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── LastOne Overlay ───────────────────────────────────────────────────────────
+
+function LastOneOverlay({ prize, locale, onClose }: { prize: Prize; locale: string; onClose: () => void }) {
+  const [visible, setVisible] = useState(false)
+  const [sparkles, setSparkles] = useState<SparkleData[]>([])
+  const style = GRADE_STYLE['ラストワン賞']
+  const gradeLabel = translateGrade('ラストワン賞', locale as 'ko' | 'ja' | 'en')
+
+  useEffect(() => {
+    const t = requestAnimationFrame(() => {
+      setVisible(true)
+      setSparkles(generateSparkles('ラストワン賞'))
+    })
+    return () => cancelAnimationFrame(t)
+  }, [])
+
+  return (
+    <div
+      className={`fixed inset-0 z-[70] flex flex-col items-center justify-center transition-opacity duration-500 ${visible ? 'opacity-100' : 'opacity-0'}`}
+      style={{ background: 'rgba(0,0,0,0.92)' }}
+    >
+      {/* Glow */}
+      <div
+        className="absolute rounded-full blur-3xl opacity-40 pointer-events-none"
+        style={{ width: 500, height: 400, background: '#f59e0b' }}
+      />
+
+      {/* Banner */}
+      <div
+        className={`mb-6 px-6 py-2 rounded-full bg-amber-500 text-white font-black text-lg tracking-widest shadow-xl transition-all duration-700 ${visible ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}`}
+        style={{ letterSpacing: '0.15em' }}
+      >
+        LAST ONE !
+      </div>
+
+      {/* Card */}
+      <div
+        className={`relative select-none transition-all duration-700 ${visible ? 'scale-100 opacity-100 translate-y-0' : 'scale-75 opacity-0 translate-y-8'}`}
+        style={{ width: 'min(85vw, 380px)', aspectRatio: '3/2' }}
+      >
+        <div className={`absolute inset-0 rounded-2xl overflow-hidden bg-white dark:bg-zinc-900 border-2 ${style.border} ring-4 ring-yellow-400 ring-offset-2 ring-offset-black flex flex-col items-center justify-center gap-2 p-3 shadow-2xl`}>
+          {/* Shine */}
+          <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none" style={{ zIndex: 3 }}>
+            <div
+              style={{
+                position: 'absolute', top: '-50%', width: '45%', height: '200%',
+                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent)',
+                transform: 'skewX(-15deg)',
+                animation: 'kuji-shine 1.4s 0.4s ease-in-out infinite',
+              }}
+            />
+          </div>
+
+          {prize.images[0] ? (
+            <div className="relative flex-1 w-full min-h-0" style={{ zIndex: 1 }}>
+              <Image src={prize.images[0]} alt={prize.name} fill className="object-contain p-1" sizes="380px" priority />
+            </div>
+          ) : (
+            <span className="text-5xl font-black text-amber-400 flex-1 flex items-center" style={{ zIndex: 1 }}>★</span>
+          )}
+
+          <div className="flex flex-col items-center gap-1 flex-shrink-0" style={{ zIndex: 2 }}>
+            <span className={`text-sm font-bold px-4 py-1 rounded-full ${style.badge}`}>{gradeLabel}</span>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 text-center line-clamp-1 max-w-[90%]">{prize.name}</p>
+          </div>
+        </div>
+
+        {/* Sparkles */}
+        {sparkles.map(sp => (
+          <div
+            key={sp.id}
+            style={{
+              position: 'absolute',
+              left: `${sp.x}%`, top: `${sp.y}%`,
+              width: sp.size, height: sp.size,
+              background: sp.color,
+              borderRadius: sp.rotate ? '2px' : '50%',
+              transform: 'scale(0)',
+              animation: `kuji-sparkle 0.9s ${sp.delay}s ease-out forwards`,
+              '--tx': `${sp.tx}px`,
+              '--ty': `${sp.ty}px`,
+              zIndex: 10,
+              pointerEvents: 'none',
+              rotate: sp.rotate ? '45deg' : undefined,
+            } as React.CSSProperties}
+          />
+        ))}
+
+        {/* Flash */}
+        <div
+          className="absolute inset-0 rounded-2xl pointer-events-none"
+          style={{ background: '#f59e0b', opacity: 0, animation: 'kuji-flash 0.55s ease-out forwards', zIndex: 5 }}
+        />
+      </div>
+
+      {/* Subtitle */}
+      <p className={`mt-4 text-sm text-amber-300/80 text-center transition-all duration-700 delay-300 ${visible ? 'opacity-100' : 'opacity-0'}`}>
+        마지막 1장을 뽑은 행운의 주인공!
+      </p>
+
+      <button
+        onClick={onClose}
+        className={`mt-6 px-10 py-3 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-sm transition-all duration-700 delay-500 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+      >
+        확인
+      </button>
     </div>
   )
 }
@@ -492,16 +905,43 @@ export default function SimulatorModal({ product, prizes, onClose }: {
   onClose: () => void
 }) {
   const { t, locale } = useLanguage()
-  const [tickets, setTickets] = useState<Ticket[]>(() => buildTickets(prizes))
+  const [phase, setPhase] = useState<'setup' | 'playing'>('setup')
+  const [config, setConfig] = useState<SimulatorConfig>({ mode: 'default', preDrawn: {}, drawLimit: null })
+  const [tickets, setTickets] = useState<Ticket[]>([])
   const [resetCount, setResetCount] = useState(0)
   const [revealTicket, setRevealTicket] = useState<Ticket | null>(null)
   const [toastKey, setToastKey] = useState(0)
   const [toastPrize, setToastPrize] = useState<Prize | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [showLastOne, setShowLastOne] = useState(false)
+  const [sessionDraws, setSessionDraws] = useState(0)
+
+  const lastOnePrize = useMemo(
+    () => prizes.find(p => getPrizeGrade(p) === 'ラストワン賞') ?? null,
+    [prizes]
+  )
+
+  function handleSetupStart(cfg: SimulatorConfig) {
+    setConfig(cfg)
+    setTickets(buildTickets(prizes, cfg.preDrawn))
+    setSessionDraws(0)
+    setShowLastOne(false)
+    setToastPrize(null)
+    setRevealTicket(null)
+    setResetCount(c => c + 1)
+    setPhase('playing')
+  }
 
   const drawn = useMemo(() => tickets.filter(tk => tk.drawn), [tickets])
   const remaining = tickets.length - drawn.length
   const isFinished = remaining === 0
+  const drawsLeft = config.drawLimit !== null ? config.drawLimit - sessionDraws : null
+  const sessionDone = drawsLeft !== null && drawsLeft <= 0
+
+  // 이번 세션에서 뽑은 장수 기준 비용 (setup에서 이미 뽑힌 것 제외)
+  const totalCost = product.price_yen != null && sessionDraws > 0
+    ? (sessionDraws * product.price_yen).toLocaleString('ja-JP')
+    : null
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -528,11 +968,17 @@ export default function SimulatorModal({ product, prizes, onClose }: {
   // Called after user confirms reveal overlay
   const handleRevealComplete = useCallback(() => {
     if (!revealTicket) return
-    setTickets(prev => prev.map(tk => tk.id === revealTicket.id ? { ...tk, drawn: true } : tk))
+    const newTickets = tickets.map(tk => tk.id === revealTicket.id ? { ...tk, drawn: true } : tk)
+    const nowRemaining = newTickets.filter(tk => !tk.drawn).length
+    setTickets(newTickets)
     setToastPrize(revealTicket.prize)
     setToastKey(k => k + 1)
     setRevealTicket(null)
-  }, [revealTicket])
+    setSessionDraws(n => n + 1)
+    if (nowRemaining === 0 && lastOnePrize) {
+      setShowLastOne(true)
+    }
+  }, [revealTicket, tickets, lastOnePrize])
 
   const drawRandom = useCallback(() => {
     const undrawn = tickets.filter(tk => !tk.drawn)
@@ -542,19 +988,30 @@ export default function SimulatorModal({ product, prizes, onClose }: {
   }, [tickets, openReveal])
 
   const reset = useCallback(() => {
-    setTickets(buildTickets(prizes))
+    setTickets(buildTickets(prizes, config.preDrawn))
     setToastPrize(null)
     setRevealTicket(null)
+    setShowLastOne(false)
+    setSessionDraws(0)
     setResetCount(c => c + 1)
-  }, [prizes])
+  }, [prizes, config.preDrawn])
 
   const cols = 7
+
+  if (phase === 'setup') {
+    return <SetupScreen product={product} prizes={prizes} onStart={handleSetupStart} onClose={onClose} />
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex bg-zinc-950">
       {/* Reveal overlay */}
       {revealTicket && (
         <RevealOverlay ticket={revealTicket} onComplete={handleRevealComplete} />
+      )}
+
+      {/* Last One bonus overlay */}
+      {showLastOne && lastOnePrize && (
+        <LastOneOverlay prize={lastOnePrize} locale={locale} onClose={() => setShowLastOne(false)} />
       )}
 
       {/* ── Main area ── */}
@@ -568,12 +1025,28 @@ export default function SimulatorModal({ product, prizes, onClose }: {
           </button>
           <span className="text-sm font-semibold text-zinc-200 truncate flex-1 min-w-0">{product.title}</span>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-xs text-zinc-500 tabular-nums">{drawn.length} / {tickets.length}</span>
+            <div className="flex flex-col items-end leading-tight">
+              <span className="text-xs text-zinc-500 tabular-nums">{drawn.length} / {tickets.length}</span>
+              {drawsLeft !== null && (
+                <span className={`text-[10px] tabular-nums font-semibold ${drawsLeft <= 3 ? 'text-red-400' : 'text-orange-400'}`}>
+                  세션 {drawsLeft}회 남음
+                </span>
+              )}
+              {totalCost && (
+                <span className="text-xs font-semibold text-amber-400 tabular-nums">¥{totalCost}</span>
+              )}
+            </div>
             <button
               onClick={() => setPanelOpen(v => !v)}
               className={`hidden sm:block text-xs px-3 py-1 rounded-full border transition-colors ${panelOpen ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'}`}
             >
               {t.simulatorResults}
+            </button>
+            <button
+              onClick={() => setPhase('setup')}
+              className="text-xs px-3 py-1 rounded-full border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 transition-colors"
+            >
+              설정
             </button>
             <button
               onClick={reset}
@@ -624,7 +1097,7 @@ export default function SimulatorModal({ product, prizes, onClose }: {
         </div>
 
         {/* Footer */}
-        {!isFinished && (
+        {!isFinished && !sessionDone && (
           <div className="flex-shrink-0 p-3 bg-zinc-950 border-t border-zinc-800">
             <button
               onClick={drawRandom}
@@ -634,12 +1107,36 @@ export default function SimulatorModal({ product, prizes, onClose }: {
             </button>
           </div>
         )}
+
+        {/* 세션 종료 */}
+        {sessionDone && !isFinished && (
+          <div className="flex-shrink-0 p-3 bg-zinc-950 border-t border-zinc-800 flex flex-col items-center gap-2">
+            <p className="text-sm text-zinc-400">
+              설정한 <span className="text-white font-bold">{config.drawLimit}회</span> 완료
+              {totalCost && <> · <span className="text-amber-400 font-bold">¥{totalCost}</span> 사용</>}
+            </p>
+            <div className="flex gap-2 w-full">
+              <button
+                onClick={() => setPhase('setup')}
+                className="flex-1 py-2.5 rounded-full border border-zinc-700 text-zinc-300 hover:border-zinc-500 text-sm font-medium transition-colors"
+              >
+                설정 변경
+              </button>
+              <button
+                onClick={reset}
+                className="flex-1 py-2.5 rounded-full bg-orange-500 hover:bg-orange-400 text-white font-bold text-sm transition-colors"
+              >
+                같은 설정으로 다시
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Results side panel */}
       <div className={`flex-shrink-0 bg-zinc-900 border-l border-zinc-800 transition-all duration-300 overflow-hidden ${panelOpen ? 'w-64' : 'w-0'}`}>
         <div className="p-4 h-full flex flex-col gap-3 overflow-hidden" style={{ width: 256 }}>
-          <h3 className="text-sm font-bold text-zinc-200 flex-shrink-0">{t.simulatorResults} ({drawn.length})</h3>
+          <h3 className="text-sm font-bold text-zinc-200 flex-shrink-0">{t.simulatorResults}</h3>
           <DrawnPanel drawn={drawn} locale={locale} />
         </div>
       </div>

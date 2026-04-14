@@ -3,6 +3,7 @@
 import { useLanguage } from '@/app/contexts/LanguageContext'
 import { fmt } from '@/lib/i18n'
 import LanguageSwitcher from './LanguageSwitcher'
+import NoticesBell from './NoticesBell'
 
 interface Props {
   productCount: number
@@ -22,7 +23,10 @@ export default function Header({ productCount }: Props) {
             {fmt(t.headerSubtitle, { count: productCount })}
           </p>
         </div>
-        <LanguageSwitcher />
+        <div className="flex items-center gap-1">
+          <NoticesBell />
+          <LanguageSwitcher />
+        </div>
       </div>
     </header>
   )

@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useMemo, useState, useCallback, useEffect } from 'react'
 import type { KujiProduct, Prize } from '@/types/kuji'
 import { useLanguage } from '@/app/contexts/LanguageContext'
@@ -184,6 +185,7 @@ function PrizeList({ prizes, locale, t, onImageClick }: {
 
 export default function ProductDetail({ product }: { product: KujiProduct }) {
   const { t, locale } = useLanguage()
+  const router = useRouter()
   const [simulatorOpen, setSimulatorOpen] = useState(false)
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null)
   const openLightbox = useCallback((src: string, alt: string) => setLightbox({ src, alt }), [])
@@ -220,15 +222,15 @@ export default function ProductDetail({ product }: { product: KujiProduct }) {
       <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <Link
-              href="/"
+            <button
+              onClick={() => window.history.length > 1 ? router.back() : router.push('/')}
               className="text-sm text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors flex items-center gap-1 shrink-0"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
               {t.productBack}
-            </Link>
+            </button>
             <span className="text-zinc-300 dark:text-zinc-600">/</span>
             <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">
               一番くじ Lab

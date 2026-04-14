@@ -7,14 +7,19 @@ export default function Footer() {
 
   return (
     <footer className="bg-zinc-100 dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800 mt-auto">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
-        <p>
-          이 사이트는 Ichiban Kuji 팬이 만든 <strong>비공식 팬사이트</strong>입니다.<br />
-          모든 이미지와 상품 정보의 저작권은 BANDAI SPIRITS 및 각 원저작권자에게 있습니다.
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400 space-y-2">
+        <p>{t.footerDisclaimer}</p>
+        <p>{t.footerNoRevenue}</p>
+        <p className="text-xs">
+          <a
+            href="mailto:badajang0712@gmail.com"
+            className="underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+          >
+            {t.footerBugReport}
+          </a>
+          {' · '}badajang0712@gmail.com
         </p>
-        <p className="mt-3 text-xs">
-          © 2026 一番くじ Lab • Non-commercial Fan Project • All Rights Reserved to Original Copyright Holders
-        </p>
+        <p className="text-xs">{t.footerCopyright}</p>
       </div>
     </footer>
   )

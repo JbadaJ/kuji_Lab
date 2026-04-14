@@ -9,6 +9,11 @@ export const LOCALE_NAMES: Record<Locale, string> = {
 }
 
 export interface Translations {
+  // Footer
+  footerDisclaimer: string
+  footerNoRevenue: string
+  footerBugReport: string
+  footerCopyright: string
   // Header
   headerSubtitle: string       // {count} placeholder
   // Search
@@ -66,6 +71,10 @@ export interface Translations {
 
 export const translations: Record<Locale, Translations> = {
   ko: {
+    footerDisclaimer: '이 사이트는 Ichiban Kuji 팬이 만든 비공식 팬사이트입니다. 모든 이미지와 상품 정보의 저작권은 BANDAI SPIRITS 및 각 원저작권자에게 있습니다.',
+    footerNoRevenue: '이 사이트는 광고·수익 없이 순수 팬 목적으로 운영됩니다.',
+    footerBugReport: '버그 제보',
+    footerCopyright: '© 2026 一番くじ Lab · 비상업적 팬 프로젝트 · 저작권은 원저작권자에게 있습니다',
     headerSubtitle: '{count}개 상품 데이터베이스',
     searchPlaceholder: '타이틀로 검색 (예: 원피스, ドラゴンボール, Gundam)',
     filterYear: '연도',
@@ -113,6 +122,10 @@ export const translations: Record<Locale, Translations> = {
     categoryWestern: '디즈니/서양',
   },
   ja: {
+    footerDisclaimer: 'このサイトはIchiban Kujiのファンが作った非公式ファンサイトです。すべての画像・商品情報の著作権はBANDAI SPIRITSおよび各原著作権者に帰属します。',
+    footerNoRevenue: 'このサイトは広告・収益なしの純粋なファン活動として運営されています。',
+    footerBugReport: 'バグ報告',
+    footerCopyright: '© 2026 一番くじ Lab · 非営利ファンプロジェクト · 著作権は原著作権者に帰属します',
     headerSubtitle: '{count}件の商品',
     searchPlaceholder: 'タイトルで検索（例：ワンピース、ドラゴンボール）',
     filterYear: '年',
@@ -160,6 +173,10 @@ export const translations: Record<Locale, Translations> = {
     categoryWestern: 'ディズニー／洋画',
   },
   en: {
+    footerDisclaimer: 'This is an unofficial fan site created by an Ichiban Kuji fan. All images and product information are copyright of BANDAI SPIRITS and their respective owners.',
+    footerNoRevenue: 'This site is operated purely as a fan project with no ads or revenue.',
+    footerBugReport: 'Report a Bug',
+    footerCopyright: '© 2026 一番くじ Lab · Non-commercial Fan Project · All rights reserved to original copyright holders',
     headerSubtitle: '{count} products',
     searchPlaceholder: 'Search by title (e.g. One Piece, Dragon Ball, Gundam)',
     filterYear: 'Year',
