@@ -2,6 +2,7 @@ export interface Prize {
   full_name: string
   grade: string
   name: string
+  count?: number        // actual ticket count per grade (from kujimap.com), undefined = estimated
   variants?: number
   size?: string
   description?: string
@@ -24,6 +25,7 @@ export interface KujiProduct {
   gallery_images: string[]
   prizes: Prize[]
   prize_count: number
+  kujimap_url?: string  // matched product URL on kujimap.com
 }
 
 // Lightweight version passed from Server → Client Component

@@ -54,27 +54,32 @@ interface SimulatorConfig {
   drawLimit: number | null           // null = unlimited
 }
 
-function buildPool(prizes: Prize[]): { regular: Prize[]; factor: number } {
+function buildPool(prizes: Prize[]): { regular: Prize[]; factor: number; hasRealCounts: boolean } {
   const regular = prizes.filter(p => getPrizeGrade(p) !== 'ラストワン賞')
+  const hasRealCounts = regular.length > 0 && regular.every(p => (p.count ?? 0) > 0)
+  if (hasRealCounts) {
+    return { regular, factor: 1, hasRealCounts: true }
+  }
   const totalWeight = regular.reduce((s, _, i) => s + i + 1, 0)
   const factor = totalWeight > 0 ? Math.max(1, Math.round(80 / totalWeight)) : 1
-  return { regular, factor }
+  return { regular, factor, hasRealCounts: false }
 }
 
 function getGradeCounts(prizes: Prize[]): Array<{ prize: Prize; grade: string; total: number }> {
-  const { regular, factor } = buildPool(prizes)
+  const { regular, factor, hasRealCounts } = buildPool(prizes)
   return regular.map((prize, i) => ({
     prize,
     grade: getPrizeGrade(prize),
-    total: (i + 1) * factor,
+    total: hasRealCounts ? (prize.count ?? 1) : (i + 1) * factor,
   }))
 }
 
 function buildTickets(prizes: Prize[], preDrawn: Record<string, number> = {}): Ticket[] {
-  const { regular, factor } = buildPool(prizes)
+  const { regular, factor, hasRealCounts } = buildPool(prizes)
   const pool: Prize[] = []
   regular.forEach((p, i) => {
-    for (let j = 0; j < (i + 1) * factor; j++) pool.push(p)
+    const ticketCount = hasRealCounts ? (p.count ?? 1) : (i + 1) * factor
+    for (let j = 0; j < ticketCount; j++) pool.push(p)
   })
   const gradeRemaining = { ...preDrawn }
   return shuffle(pool).map((prize, id) => {
@@ -152,6 +157,7 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
 
   const gradeCounts = useMemo(() => getGradeCounts(prizes), [prizes])
   const totalPool = useMemo(() => gradeCounts.reduce((s, g) => s + g.total, 0), [gradeCounts])
+  const hasRealCounts = useMemo(() => prizes.filter(p => getPrizeGrade(p) !== 'ラストワン賞').every(p => (p.count ?? 0) > 0), [prizes])
 
   const totalPreDrawn = mode === 'custom'
     ? gradeCounts.reduce((s, g) => s + (preDrawn[g.grade] ?? 0), 0)
@@ -367,6 +373,20 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
                   예상 비용 <span className="text-amber-400 font-bold tabular-nums">¥{estimatedCost.toLocaleString('ja-JP')}</span>
                 </span>
               </>
+            )}
+          </div>
+
+          <div className="flex items-center justify-center gap-1.5">
+            {hasRealCounts ? (
+              <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                실제 구성 데이터 반영
+              </span>
+            ) : (
+              <span className="text-[10px] text-zinc-500 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block" />
+                추정 구성 (kujimap 데이터 미등록)
+              </span>
             )}
           </div>
 
