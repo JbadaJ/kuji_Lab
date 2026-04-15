@@ -721,10 +721,10 @@ function DrawnTicketRow({ tk, index }: { tk: Ticket; index: number }) {
   const { locale } = useLanguage()
   const label = translateGrade(tk.grade, locale as 'ko' | 'ja' | 'en')
   return (
-    <div className="flex items-center gap-2 py-0.5">
-      <span className="text-[10px] text-zinc-600 w-4 flex-shrink-0 tabular-nums">{index}</span>
-      <div className={`w-5 h-5 flex-shrink-0 rounded flex items-center justify-center ${s.badge}`}>
-        <span className="text-[9px] font-black">{getGradeLetter(tk.grade)}</span>
+    <div className="flex items-center gap-2 py-1">
+      <span className="text-[10px] text-zinc-600 w-5 flex-shrink-0 tabular-nums text-right">{index}</span>
+      <div className={`w-6 h-6 flex-shrink-0 rounded-md flex items-center justify-center ${s.badge}`}>
+        <span className="text-[10px] font-black">{getGradeLetter(tk.grade)}</span>
       </div>
       <div className="min-w-0 flex-1">
         <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${s.badge}`}>{label}</span>
@@ -744,13 +744,26 @@ function DrawnPanel({ drawn, locale }: { drawn: Ticket[]; locale: string }) {
     return [...map.entries()]
   }, [sessionDrawn])
 
+  const presetTally = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const tk of presetDrawn) map.set(tk.grade, (map.get(tk.grade) ?? 0) + 1)
+    return [...map.entries()]
+  }, [presetDrawn])
+
+  const myLabel    = locale === 'ko' ? '내가 뽑은 결과' : locale === 'en' ? 'My draws'   : '引いた結果'
+  const preLabel   = locale === 'ko' ? '기존 뽑힌 결과' : locale === 'en' ? 'Pre-drawn'  : '設定済み'
+
   return (
-    <div className="flex flex-col gap-3 h-full overflow-hidden">
-      {/* Session draws */}
-      <div className="flex flex-col gap-2 flex-shrink-0">
-        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">
-          {locale === 'ko' ? '이번 뽑기' : locale === 'en' ? 'This session' : 'このセッション'} ({sessionDrawn.length})
-        </p>
+    <div className="flex flex-col gap-0 h-full overflow-hidden">
+
+      {/* ── Section A: My session draws ── */}
+      <div className="flex flex-col gap-2 flex-shrink-0 pb-3">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-orange-500 flex-shrink-0" />
+          <p className="text-[10px] font-bold text-zinc-300 uppercase tracking-wide">
+            {myLabel} <span className="text-orange-400 font-black">({sessionDrawn.length})</span>
+          </p>
+        </div>
         <div className="flex flex-wrap gap-1.5">
           {sessionTally.map(([grade, count]) => {
             const s = GRADE_STYLE[grade] ?? DEFAULT_STYLE
@@ -760,29 +773,46 @@ function DrawnPanel({ drawn, locale }: { drawn: Ticket[]; locale: string }) {
               </span>
             )
           })}
-          {sessionDrawn.length === 0 && <span className="text-xs text-zinc-500">-</span>}
+          {sessionDrawn.length === 0 && <span className="text-xs text-zinc-500 italic">아직 없음</span>}
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto flex flex-col gap-1 pr-1 min-h-0">
+      <div className="flex-1 overflow-y-auto flex flex-col gap-0.5 pr-1 min-h-0 border-b border-zinc-700/60 pb-3">
         {[...sessionDrawn].reverse().map((tk, i) => (
           <DrawnTicketRow key={tk.id} tk={tk} index={sessionDrawn.length - i} />
         ))}
       </div>
 
-      {/* Preset draws */}
-      {presetDrawn.length > 0 && (
-        <div className="flex flex-col gap-1.5 flex-shrink-0 border-t border-zinc-700 pt-3">
-          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wide">
-            {locale === 'ko' ? '설정 뽑기' : locale === 'en' ? 'Pre-drawn' : '設定済み'} ({presetDrawn.length})
+      {/* ── Section B: Preset (pre-drawn) ── */}
+      <div className={`flex flex-col gap-2 flex-shrink-0 pt-3 ${presetDrawn.length === 0 ? 'opacity-40' : ''}`}>
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-zinc-500 flex-shrink-0" />
+          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">
+            {preLabel} <span className="text-zinc-400 font-black">({presetDrawn.length})</span>
           </p>
-          <div className="flex flex-col gap-1 max-h-32 overflow-y-auto pr-1">
-            {[...presetDrawn].reverse().map((tk, i) => (
-              <DrawnTicketRow key={tk.id} tk={tk} index={presetDrawn.length - i} />
-            ))}
-          </div>
         </div>
-      )}
+        {presetDrawn.length > 0 ? (
+          <>
+            <div className="flex flex-wrap gap-1.5">
+              {presetTally.map(([grade, count]) => {
+                const s = GRADE_STYLE[grade] ?? DEFAULT_STYLE
+                return (
+                  <span key={grade} className={`text-xs px-2 py-0.5 rounded-full font-bold opacity-70 ${s.badge}`}>
+                    {getGradeLetter(grade)} ×{count}
+                  </span>
+                )
+              })}
+            </div>
+            <div className="flex flex-col gap-0.5 max-h-40 overflow-y-auto pr-1">
+              {[...presetDrawn].reverse().map((tk, i) => (
+                <DrawnTicketRow key={tk.id} tk={tk} index={presetDrawn.length - i} />
+              ))}
+            </div>
+          </>
+        ) : (
+          <span className="text-xs text-zinc-600 italic">설정에서 뽑힌 티켓 없음</span>
+        )}
+      </div>
     </div>
   )
 }
@@ -1038,7 +1068,7 @@ export default function SimulatorModal({ product, prizes, onClose }: {
             </div>
             <button
               onClick={() => setPanelOpen(v => !v)}
-              className={`hidden sm:block text-xs px-3 py-1 rounded-full border transition-colors ${panelOpen ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'}`}
+              className={`text-xs px-3 py-1 rounded-full border transition-colors ${panelOpen ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'}`}
             >
               {t.simulatorResults}
             </button>
@@ -1133,13 +1163,47 @@ export default function SimulatorModal({ product, prizes, onClose }: {
         )}
       </div>
 
-      {/* Results side panel */}
-      <div className={`flex-shrink-0 bg-zinc-900 border-l border-zinc-800 transition-all duration-300 overflow-hidden ${panelOpen ? 'w-64' : 'w-0'}`}>
-        <div className="p-4 h-full flex flex-col gap-3 overflow-hidden" style={{ width: 256 }}>
-          <h3 className="text-sm font-bold text-zinc-200 flex-shrink-0">{t.simulatorResults}</h3>
+      {/* Results side panel (desktop) */}
+      <div className={`hidden sm:block flex-shrink-0 bg-zinc-900 border-l border-zinc-800 transition-all duration-300 overflow-hidden ${panelOpen ? 'w-72' : 'w-0'}`}>
+        <div className="p-4 h-full flex flex-col gap-3 overflow-hidden" style={{ width: 288 }}>
+          <div className="flex items-center justify-between flex-shrink-0">
+            <h3 className="text-sm font-bold text-zinc-200">{t.simulatorResults}</h3>
+            <button onClick={() => setPanelOpen(false)} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           <DrawnPanel drawn={drawn} locale={locale} />
         </div>
       </div>
+
+      {/* Results bottom sheet (mobile) */}
+      {panelOpen && (
+        <div className="sm:hidden fixed inset-0 z-40 flex flex-col justify-end" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={() => setPanelOpen(false)}>
+          <div
+            className="bg-zinc-900 rounded-t-2xl border-t border-zinc-700 flex flex-col"
+            style={{ maxHeight: '70vh' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Handle */}
+            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+              <div className="w-10 h-1 rounded-full bg-zinc-600" />
+            </div>
+            <div className="flex items-center justify-between px-4 py-2 flex-shrink-0">
+              <h3 className="text-sm font-bold text-zinc-200">{t.simulatorResults}</h3>
+              <button onClick={() => setPanelOpen(false)} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden px-4 pb-6 min-h-0">
+              <DrawnPanel drawn={drawn} locale={locale} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
