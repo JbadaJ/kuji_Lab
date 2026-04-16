@@ -51,7 +51,7 @@ export interface Translations {
   productStores: string
   productSimulator: string
   productNoImage: string
-  // Simulator
+  // Simulator — playing
   simulatorResults: string
   simulatorReset: string
   simulatorFinished: string
@@ -59,6 +59,59 @@ export interface Translations {
   simulatorDrawRandom: string   // {count} placeholder
   simulatorPullHint: string
   simulatorConfirm: string
+  simulatorSetupButton: string
+  simulatorProbButton: string
+  simulatorSessionLeft: string  // {count}
+  simulatorStatusTab: string
+  simulatorSessionDone: string  // {count}
+  simulatorCostUsed: string
+  simulatorChangeSetup: string
+  simulatorSameAgain: string
+  simulatorLastOneMsg: string
+  // Simulator — setup screen
+  simulatorSetupTitle: string
+  simulatorStartMode: string
+  simulatorModeDefault: string
+  simulatorModeDefaultSub: string
+  simulatorModeRandom: string
+  simulatorModeRandomSub: string
+  simulatorModeCustom: string
+  simulatorModeCustomSub: string
+  simulatorRandomDesc: string
+  simulatorPreDrawnLabel: string
+  simulatorPresetClear: string
+  simulatorOf: string
+  simulatorPreDrawnSummary: string  // {drawn}, {remaining}
+  simulatorDrawLimitSection: string
+  simulatorDrawLimitToggle: string
+  simulatorDrawLimitDesc: string
+  simulatorDrawsLabel: string
+  simulatorDrawUnit: string
+  simulatorTicketsRemaining: string  // {count}
+  simulatorSessionDrawsCount: string // {count}
+  simulatorEstimatedCost: string
+  simulatorRealData: string
+  simulatorEstimatedData: string
+  simulatorNoTickets: string
+  simulatorStart: string
+  simulatorPerDraw: string
+  // Simulator — status board
+  simulatorRemaining: string
+  simulatorCompleted: string
+  simulatorDrawnCount: string
+  simulatorTotalCount: string
+  // Simulator — probability modal
+  simulatorProbTitle: string
+  simulatorProbSubtitle: string    // {count}
+  simulatorProbCombined: string
+  simulatorProbRemainingInfo: string // {remaining}, {total}
+  simulatorProbHint: string
+  simulatorProbClear: string
+  // Simulator — drawn panel
+  simulatorMyDraws: string
+  simulatorPreDrawnSection: string
+  simulatorNoDrawnYet: string
+  simulatorPreDrawnEmpty: string
   // IP categories
   categoryShonen: string
   categoryShoujo: string
@@ -113,6 +166,55 @@ export const translations: Record<Locale, Translations> = {
     simulatorDrawRandom: '랜덤으로 뽑기 · 남은 {count}장',
     simulatorPullHint: '오른쪽으로 드래그하여 열기',
     simulatorConfirm: '확인',
+    simulatorSetupButton: '설정',
+    simulatorProbButton: '확률',
+    simulatorSessionLeft: '세션 {count}회 남음',
+    simulatorStatusTab: '현황판',
+    simulatorSessionDone: '설정한 {count}회 완료',
+    simulatorCostUsed: '사용',
+    simulatorChangeSetup: '설정 변경',
+    simulatorSameAgain: '같은 설정으로 다시',
+    simulatorLastOneMsg: '마지막 1장을 뽑은 행운의 주인공!',
+    simulatorSetupTitle: '뽑기 설정',
+    simulatorStartMode: '시작 방식',
+    simulatorModeDefault: '기본',
+    simulatorModeDefaultSub: '전체 티켓으로 처음부터',
+    simulatorModeRandom: '랜덤',
+    simulatorModeRandomSub: '이미 뽑힌 수 무작위',
+    simulatorModeCustom: '상세 설정',
+    simulatorModeCustomSub: '등급별 직접 설정',
+    simulatorRandomDesc: '시작 시 각 등급의 티켓 일부가 이미 뽑혀있는 상태로 시작합니다. 뽑을수록 희귀 상품 확률이 올라가는 상황을 시뮬레이션합니다.',
+    simulatorPreDrawnLabel: '등급별 이미 뽑힌 수',
+    simulatorPresetClear: '초기화',
+    simulatorOf: '장 중',
+    simulatorPreDrawnSummary: '{drawn}장 이미 뽑힘 → 남은 티켓 {remaining}장',
+    simulatorDrawLimitSection: '이번 세션 뽑기 횟수',
+    simulatorDrawLimitToggle: '횟수 제한',
+    simulatorDrawLimitDesc: '설정한 횟수만큼만 뽑고 자동 종료',
+    simulatorDrawsLabel: '뽑을 횟수',
+    simulatorDrawUnit: '회',
+    simulatorTicketsRemaining: '남은 티켓 {count}장',
+    simulatorSessionDrawsCount: '이번 세션 {count}회',
+    simulatorEstimatedCost: '예상 비용',
+    simulatorRealData: '실제 구성 데이터 반영',
+    simulatorEstimatedData: '추정 구성 (kujimap 데이터 미등록)',
+    simulatorNoTickets: '뽑을 티켓이 없습니다',
+    simulatorStart: '시작하기',
+    simulatorPerDraw: '1회',
+    simulatorRemaining: '남음',
+    simulatorCompleted: '완료',
+    simulatorDrawnCount: '뽑힘',
+    simulatorTotalCount: '전체',
+    simulatorProbTitle: '다음 뽑기 확률',
+    simulatorProbSubtitle: '남은 티켓 {count}장 기준 · 등급을 눌러 합산',
+    simulatorProbCombined: '중 하나 뽑을 확률',
+    simulatorProbRemainingInfo: '해당 등급 남은 티켓 {remaining}장 / 전체 {total}장',
+    simulatorProbHint: '여러 등급을 선택하면 합산 확률을 계산해요',
+    simulatorProbClear: '선택 초기화',
+    simulatorMyDraws: '내가 뽑은 결과',
+    simulatorPreDrawnSection: '기존 뽑힌 결과',
+    simulatorNoDrawnYet: '아직 없음',
+    simulatorPreDrawnEmpty: '설정에서 뽑힌 티켓 없음',
     categoryShonen: '소년 만화',
     categoryShoujo: '소녀/마법소녀',
     categoryGames: '게임',
@@ -164,6 +266,55 @@ export const translations: Record<Locale, Translations> = {
     simulatorDrawRandom: 'ランダムで引く · 残り{count}枚',
     simulatorPullHint: '右へドラッグして開ける',
     simulatorConfirm: '確認',
+    simulatorSetupButton: '設定',
+    simulatorProbButton: '確率',
+    simulatorSessionLeft: 'セッション残り{count}回',
+    simulatorStatusTab: '現況',
+    simulatorSessionDone: '設定した{count}回完了',
+    simulatorCostUsed: '使用',
+    simulatorChangeSetup: '設定を変更',
+    simulatorSameAgain: '同じ設定でもう一度',
+    simulatorLastOneMsg: '最後の1枚を引いた幸運の主人公！',
+    simulatorSetupTitle: '抽選設定',
+    simulatorStartMode: '開始方法',
+    simulatorModeDefault: 'デフォルト',
+    simulatorModeDefaultSub: '全チケットで最初から',
+    simulatorModeRandom: 'ランダム',
+    simulatorModeRandomSub: '引き済みをランダム設定',
+    simulatorModeCustom: 'カスタム',
+    simulatorModeCustomSub: '等級別に設定',
+    simulatorRandomDesc: '開始時に各等級のチケットが一部引き済みの状態からスタートします。引くほどレアアイテムの確率が上がる状況をシミュレーションします。',
+    simulatorPreDrawnLabel: '等級別引き済み数',
+    simulatorPresetClear: 'リセット',
+    simulatorOf: '枚中',
+    simulatorPreDrawnSummary: '{drawn}枚引き済み → 残りチケット{remaining}枚',
+    simulatorDrawLimitSection: 'このセッションの回数',
+    simulatorDrawLimitToggle: '回数制限',
+    simulatorDrawLimitDesc: '設定した回数だけ引いて自動終了',
+    simulatorDrawsLabel: '回数',
+    simulatorDrawUnit: '回',
+    simulatorTicketsRemaining: '残りチケット{count}枚',
+    simulatorSessionDrawsCount: 'このセッション{count}回',
+    simulatorEstimatedCost: '予想費用',
+    simulatorRealData: '実際の構成データを反映',
+    simulatorEstimatedData: '推定構成（kujimap未登録）',
+    simulatorNoTickets: '引けるチケットがありません',
+    simulatorStart: '開始する',
+    simulatorPerDraw: '1回',
+    simulatorRemaining: '残り',
+    simulatorCompleted: '完了',
+    simulatorDrawnCount: '引いた',
+    simulatorTotalCount: '全体',
+    simulatorProbTitle: '次の抽選確率',
+    simulatorProbSubtitle: '残り{count}枚基準・等級をタップして合算',
+    simulatorProbCombined: 'のどれかを引く確率',
+    simulatorProbRemainingInfo: '対象等級の残り{remaining}枚 / 全体{total}枚',
+    simulatorProbHint: '複数の等級を選ぶと合算確率を計算します',
+    simulatorProbClear: '選択リセット',
+    simulatorMyDraws: '引いた結果',
+    simulatorPreDrawnSection: '設定済み',
+    simulatorNoDrawnYet: 'まだなし',
+    simulatorPreDrawnEmpty: '設定で引いたチケットなし',
     categoryShonen: '少年漫画',
     categoryShoujo: '少女／魔法少女',
     categoryGames: 'ゲーム',
@@ -215,6 +366,55 @@ export const translations: Record<Locale, Translations> = {
     simulatorDrawRandom: 'Draw Random · {count} left',
     simulatorPullHint: 'Drag right to open',
     simulatorConfirm: 'OK',
+    simulatorSetupButton: 'Setup',
+    simulatorProbButton: 'Odds',
+    simulatorSessionLeft: '{count} draws left',
+    simulatorStatusTab: 'Status',
+    simulatorSessionDone: '{count} draws complete',
+    simulatorCostUsed: 'spent',
+    simulatorChangeSetup: 'Change Setup',
+    simulatorSameAgain: 'Draw again (same settings)',
+    simulatorLastOneMsg: 'You drew the last ticket!',
+    simulatorSetupTitle: 'Draw Settings',
+    simulatorStartMode: 'Start Mode',
+    simulatorModeDefault: 'Default',
+    simulatorModeDefaultSub: 'Start fresh with all tickets',
+    simulatorModeRandom: 'Random',
+    simulatorModeRandomSub: 'Randomize pre-drawn count',
+    simulatorModeCustom: 'Custom',
+    simulatorModeCustomSub: 'Set per grade manually',
+    simulatorRandomDesc: 'Starts with some tickets already drawn per grade. Simulates a scenario where rare item probability increases as more tickets are drawn.',
+    simulatorPreDrawnLabel: 'Pre-drawn per grade',
+    simulatorPresetClear: 'Clear',
+    simulatorOf: 'of',
+    simulatorPreDrawnSummary: '{drawn} pre-drawn → {remaining} tickets remaining',
+    simulatorDrawLimitSection: 'Session Draw Limit',
+    simulatorDrawLimitToggle: 'Limit draws',
+    simulatorDrawLimitDesc: 'Auto-stop after the set number of draws',
+    simulatorDrawsLabel: 'Draws',
+    simulatorDrawUnit: '',
+    simulatorTicketsRemaining: '{count} tickets left',
+    simulatorSessionDrawsCount: 'Session: {count} draws',
+    simulatorEstimatedCost: 'Est. cost',
+    simulatorRealData: 'Real composition data',
+    simulatorEstimatedData: 'Estimated (no kujimap data)',
+    simulatorNoTickets: 'No tickets to draw',
+    simulatorStart: 'Start',
+    simulatorPerDraw: 'Per draw',
+    simulatorRemaining: 'Left',
+    simulatorCompleted: 'Done',
+    simulatorDrawnCount: 'Drawn',
+    simulatorTotalCount: 'Total',
+    simulatorProbTitle: 'Draw Probability',
+    simulatorProbSubtitle: 'Based on {count} remaining · tap grades to combine',
+    simulatorProbCombined: 'chance of drawing any of',
+    simulatorProbRemainingInfo: '{remaining} of selected / {total} total remaining',
+    simulatorProbHint: 'Select multiple grades to see combined probability',
+    simulatorProbClear: 'Clear selection',
+    simulatorMyDraws: 'My draws',
+    simulatorPreDrawnSection: 'Pre-drawn',
+    simulatorNoDrawnYet: 'None yet',
+    simulatorPreDrawnEmpty: 'No pre-drawn tickets set',
     categoryShonen: 'Shonen Manga',
     categoryShoujo: 'Shoujo / Magical Girl',
     categoryGames: 'Games',

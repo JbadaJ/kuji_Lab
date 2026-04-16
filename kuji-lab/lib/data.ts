@@ -1,7 +1,29 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import type { KujiProduct, ProductSummary } from '@/types/kuji'
+import type { KujiProduct, Prize, ProductSummary } from '@/types/kuji'
 import { getAliases, getIpTags } from './aliases'
+
+/**
+ * 같은 상품 내 여러 상(prize)에서 동일하게 공유되는 첫 번째 이미지(시리즈 로고/타이틀)를
+ * 제거한다. 스크래핑 시 페이지 상단 이미지가 각 상의 images[0]에 섞여 들어온 경우를 처리.
+ */
+function cleanPrizeImages(prizes: Prize[]): Prize[] {
+  if (prizes.length < 2) return prizes
+
+  const firstImgCount = new Map<string, number>()
+  for (const p of prizes) {
+    if (p.images[0]) firstImgCount.set(p.images[0], (firstImgCount.get(p.images[0]) ?? 0) + 1)
+  }
+  const sharedFirstImgs = new Set(
+    [...firstImgCount.entries()].filter(([, cnt]) => cnt > 1).map(([url]) => url)
+  )
+  if (sharedFirstImgs.size === 0) return prizes
+
+  return prizes.map(p => ({
+    ...p,
+    images: p.images[0] && sharedFirstImgs.has(p.images[0]) ? p.images.slice(1) : p.images,
+  }))
+}
 
 let _cache: KujiProduct[] | null = null
 
@@ -45,7 +67,9 @@ export function getProductSummaries(): ProductSummary[] {
 }
 
 export function getProductBySlug(slug: string): KujiProduct | undefined {
-  return loadAll().find(p => p.slug === slug)
+  const p = loadAll().find(p => p.slug === slug)
+  if (!p) return undefined
+  return { ...p, prizes: cleanPrizeImages(p.prizes) }
 }
 
 export function getAvailableYears(): string[] {

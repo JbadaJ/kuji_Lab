@@ -121,6 +121,45 @@ const SPARKLE_COLORS: Record<string, string[]> = {
   'ラストワン賞': ['#fbbf24', '#f472b6', '#38bdf8', '#34d399', '#a78bfa', '#fb923c', '#fff'],
 }
 
+const RAINBOW_COLORS = ['#ff0000','#ff6600','#ffcc00','#00ff44','#00ccff','#0044ff','#cc00ff','#ff00aa','#ffffff','#ffee88']
+
+function generateRainbowSparkles(): SparkleData[] {
+  return Array.from({ length: 70 }, (_, id) => {
+    const angle = Math.random() * Math.PI * 2
+    const dist  = 120 + Math.random() * 280
+    return {
+      id,
+      x: 30 + Math.random() * 40,
+      y: 30 + Math.random() * 40,
+      tx: Math.cos(angle) * dist,
+      ty: Math.sin(angle) * dist,
+      color: RAINBOW_COLORS[Math.floor(Math.random() * RAINBOW_COLORS.length)],
+      size: 7 + Math.random() * 16,
+      delay: Math.random() * 0.6,
+      rotate: Math.random() > 0.3,
+    }
+  })
+}
+
+function generateRareSparkles(grade: string): SparkleData[] {
+  const colors = SPARKLE_COLORS[grade] ?? ['#fff', '#aaa']
+  return Array.from({ length: 36 }, (_, id) => {
+    const angle = Math.random() * Math.PI * 2
+    const dist  = 100 + Math.random() * 200
+    return {
+      id,
+      x: 30 + Math.random() * 40,
+      y: 30 + Math.random() * 40,
+      tx: Math.cos(angle) * dist,
+      ty: Math.sin(angle) * dist,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      size: 6 + Math.random() * 12,
+      delay: Math.random() * 0.5,
+      rotate: Math.random() > 0.4,
+    }
+  })
+}
+
 function generateSparkles(grade: string): SparkleData[] {
   const isHighTier = grade === 'A賞' || grade === 'ラストワン賞'
   const count = isHighTier ? 28 : grade === 'B賞' || grade === 'C賞' ? 18 : 12
@@ -142,6 +181,137 @@ function generateSparkles(grade: string): SparkleData[] {
   })
 }
 
+// ── GradeStatusBar (compact always-visible strip) ────────────────────────────
+
+function GradeStatusBar({ tickets }: { tickets: Ticket[] }) {
+  const { t: tBar } = useLanguage()
+  const stats = useMemo(() => {
+    const map = new Map<string, { total: number; drawn: number; prize: Prize }>()
+    for (const tk of tickets) {
+      if (tk.grade === 'ラストワン賞') continue
+      const s = map.get(tk.grade)
+      if (s) {
+        s.total++
+        if (tk.drawn) s.drawn++
+      } else {
+        map.set(tk.grade, { total: 1, drawn: tk.drawn ? 1 : 0, prize: tk.prize })
+      }
+    }
+    return [...map.entries()]
+      .map(([grade, s]) => ({ grade, total: s.total, drawn: s.drawn, remaining: s.total - s.drawn }))
+      .sort((a, b) => a.grade.localeCompare(b.grade))
+  }, [tickets])
+
+  return (
+    <div className="flex-shrink-0 flex gap-2 overflow-x-auto px-3 py-3 bg-zinc-900 border-b border-zinc-800" style={{ scrollbarWidth: 'none' }}>
+      {stats.map(({ grade, total, drawn, remaining }) => {
+        const style = GRADE_STYLE[grade] ?? DEFAULT_STYLE
+        const letter = getGradeLetter(grade)
+        const pct = total > 0 ? (drawn / total) * 100 : 0
+        const allDrawn = remaining === 0
+        return (
+          <div
+            key={grade}
+            className={`flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl min-w-[64px] ${allDrawn ? 'opacity-40' : ''}`}
+            style={{ background: 'rgba(0,0,0,0.4)' }}
+          >
+            <span className={`text-xs font-black px-2 py-0.5 rounded-full ${style.badge}`}>{letter}賞</span>
+            <div className="w-full h-1.5 rounded-full bg-zinc-700 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${pct}%`, background: style.glow }}
+              />
+            </div>
+            <div className="flex flex-col items-center gap-0">
+              <div className="flex items-baseline gap-0.5">
+                <span className={`text-sm font-bold tabular-nums leading-none ${allDrawn ? 'text-zinc-500' : 'text-white'}`}>
+                  {remaining}
+                </span>
+                <span className="text-[9px] text-zinc-500">/{total}</span>
+              </div>
+              <span className="text-[9px] text-zinc-500 leading-tight">{allDrawn ? tBar.simulatorCompleted : tBar.simulatorRemaining}</span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── GradeStatusPanel (detailed view for side panel tab) ───────────────────────
+
+function GradeStatusPanel({ tickets }: { tickets: Ticket[] }) {
+  const { t } = useLanguage()
+  const stats = useMemo(() => {
+    const map = new Map<string, { total: number; drawn: number; prize: Prize }>()
+    for (const tk of tickets) {
+      const s = map.get(tk.grade)
+      if (s) {
+        s.total++
+        if (tk.drawn) s.drawn++
+      } else {
+        map.set(tk.grade, { total: 1, drawn: tk.drawn ? 1 : 0, prize: tk.prize })
+      }
+    }
+    return [...map.entries()]
+      .map(([grade, s]) => ({ grade, total: s.total, drawn: s.drawn, remaining: s.total - s.drawn, prize: s.prize }))
+      .sort((a, b) => a.grade.localeCompare(b.grade))
+  }, [tickets])
+
+  return (
+    <div className="flex flex-col gap-2 overflow-y-auto flex-1 min-h-0 pr-1">
+      {stats.map(({ grade, total, drawn, remaining, prize }) => {
+        const style = GRADE_STYLE[grade] ?? DEFAULT_STYLE
+        const letter = getGradeLetter(grade)
+        const pct = total > 0 ? (drawn / total) * 100 : 0
+        const allDrawn = remaining === 0
+        return (
+          <div
+            key={grade}
+            className={`flex flex-col gap-2.5 p-4 rounded-xl border border-zinc-700/50 bg-zinc-800/60 transition-opacity ${allDrawn ? 'opacity-40' : ''}`}
+          >
+            {/* 상단: 배지 + 상품명 */}
+            <div className="flex items-center gap-2.5">
+              <span className={`text-sm font-black px-2.5 py-1 rounded-full flex-shrink-0 ${style.badge}`}>
+                {letter}賞
+              </span>
+              <span className="text-sm text-zinc-300 truncate flex-1 min-w-0">{prize.name}</span>
+            </div>
+            {/* 중단: 진행바 */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-2 rounded-full bg-zinc-700 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pct}%`, background: style.glow }}
+                />
+              </div>
+            </div>
+            {/* 하단: 남음 / 뽑힘 수치 */}
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex flex-col items-center gap-0.5">
+                <span className={`text-lg font-bold tabular-nums leading-none ${allDrawn ? 'text-zinc-500' : 'text-white'}`}>
+                  {remaining}
+                </span>
+                <span className="text-zinc-500">{t.simulatorRemaining}</span>
+              </div>
+              <div className="h-6 w-px bg-zinc-700" />
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-lg font-bold tabular-nums leading-none text-zinc-400">{drawn}</span>
+                <span className="text-zinc-500">{t.simulatorDrawnCount}</span>
+              </div>
+              <div className="h-6 w-px bg-zinc-700" />
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-lg font-bold tabular-nums leading-none text-zinc-500">{total}</span>
+                <span className="text-zinc-600">{t.simulatorTotalCount}</span>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── SetupScreen ───────────────────────────────────────────────────────────────
 
 function SetupScreen({ product, prizes, onStart, onClose }: {
@@ -150,6 +320,7 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
   onStart: (config: SimulatorConfig) => void
   onClose: () => void
 }) {
+  const { t } = useLanguage()
   const [mode, setMode] = useState<SimulatorConfig['mode']>('default')
   const [preDrawn, setPreDrawn] = useState<Record<string, number>>({})
   const [limitEnabled, setLimitEnabled] = useState(false)
@@ -191,9 +362,9 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
   }
 
   const MODES: { id: SimulatorConfig['mode']; label: string; sub: string }[] = [
-    { id: 'default', label: '기본',     sub: '전체 티켓으로 처음부터' },
-    { id: 'random',  label: '랜덤',     sub: '이미 뽑힌 수 무작위' },
-    { id: 'custom',  label: '상세 설정', sub: '등급별 직접 설정' },
+    { id: 'default', label: t.simulatorModeDefault, sub: t.simulatorModeDefaultSub },
+    { id: 'random',  label: t.simulatorModeRandom,  sub: t.simulatorModeRandomSub },
+    { id: 'custom',  label: t.simulatorModeCustom,  sub: t.simulatorModeCustomSub },
   ]
 
   return (
@@ -206,11 +377,11 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
           </svg>
         </button>
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] text-zinc-500 uppercase tracking-widest">뽑기 설정</p>
+          <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{t.simulatorSetupTitle}</p>
           <p className="text-sm font-semibold truncate">{product.title}</p>
         </div>
         {product.price_yen && (
-          <span className="text-xs text-zinc-500 flex-shrink-0">1회 ¥{product.price_yen.toLocaleString('ja-JP')}</span>
+          <span className="text-xs text-zinc-500 flex-shrink-0">{t.simulatorPerDraw} ¥{product.price_yen.toLocaleString('ja-JP')}</span>
         )}
       </div>
 
@@ -220,7 +391,7 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
 
           {/* Mode cards */}
           <div>
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">시작 방식</p>
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">{t.simulatorStartMode}</p>
             <div className="grid grid-cols-3 gap-2">
               {MODES.map(m => (
                 <button
@@ -243,7 +414,7 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
           {mode === 'random' && (
             <div className="rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3">
               <p className="text-sm text-zinc-400 leading-relaxed">
-                시작 시 각 등급의 티켓 일부가 이미 뽑혀있는 상태로 시작합니다. 뽑을수록 희귀 상품 확률이 올라가는 상황을 시뮬레이션합니다.
+                {t.simulatorRandomDesc}
               </p>
             </div>
           )}
@@ -252,9 +423,9 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
           {mode === 'custom' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">등급별 이미 뽑힌 수</p>
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{t.simulatorPreDrawnLabel}</p>
                 <div className="flex gap-1">
-                  {([['초기화', 0], ['25%', 0.25], ['50%', 0.5], ['75%', 0.75]] as [string, number][]).map(([label, ratio]) => (
+                  {([[t.simulatorPresetClear, 0], ['25%', 0.25], ['50%', 0.5], ['75%', 0.75]] as [string, number][]).map(([label, ratio]) => (
                     <button
                       key={label}
                       onClick={() => applyPreset(ratio)}
@@ -276,7 +447,7 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
                         {getGradeLetter(grade)}
                       </span>
                       <span className="text-xs text-zinc-400 truncate flex-1 min-w-0">{prize.name}</span>
-                      <span className="text-[10px] text-zinc-600 flex-shrink-0 tabular-nums">{total}장 중</span>
+                      <span className="text-[10px] text-zinc-600 flex-shrink-0 tabular-nums">{total} {t.simulatorOf}</span>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <button
                           onClick={() => setGradeCount(grade, count - 1, total)}
@@ -299,7 +470,7 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
 
               {totalPreDrawn > 0 && (
                 <p className="text-xs text-zinc-500 text-center">
-                  {totalPreDrawn}장 이미 뽑힘 → 남은 티켓 <span className="text-white font-semibold">{remaining}</span>장
+                  {fmt(t.simulatorPreDrawnSummary, { drawn: totalPreDrawn, remaining })}
                 </p>
               )}
             </div>
@@ -307,12 +478,12 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
 
           {/* Draw limit */}
           <div className="space-y-3">
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">이번 세션 뽑기 횟수</p>
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{t.simulatorDrawLimitSection}</p>
             <div className="rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium">횟수 제한</p>
-                  <p className="text-xs text-zinc-500 mt-0.5">설정한 횟수만큼만 뽑고 자동 종료</p>
+                  <p className="text-sm font-medium">{t.simulatorDrawLimitToggle}</p>
+                  <p className="text-xs text-zinc-500 mt-0.5">{t.simulatorDrawLimitDesc}</p>
                 </div>
                 <button
                   onClick={() => setLimitEnabled(v => !v)}
@@ -324,7 +495,7 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
 
               {limitEnabled && (
                 <div className="flex items-center gap-3 pt-2 border-t border-zinc-800">
-                  <span className="text-sm text-zinc-400">뽑을 횟수</span>
+                  <span className="text-sm text-zinc-400">{t.simulatorDrawsLabel}</span>
                   <div className="flex items-center gap-2 ml-auto">
                     <button
                       onClick={() => setDrawLimit(v => Math.max(1, v - 1))}
@@ -341,7 +512,7 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
                       onClick={() => setDrawLimit(v => Math.min(remaining || v + 1, v + 1))}
                       className="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-200 font-bold"
                     >+</button>
-                    <span className="text-sm text-zinc-500">회</span>
+                    {t.simulatorDrawUnit && <span className="text-sm text-zinc-500">{t.simulatorDrawUnit}</span>}
                   </div>
                 </div>
               )}
@@ -356,13 +527,13 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
           {/* Preview stats */}
           <div className="flex items-center justify-center gap-3 text-sm flex-wrap">
             <span className="text-zinc-500">
-              남은 티켓 <span className="text-white font-bold tabular-nums">{remaining}</span>장
+              {fmt(t.simulatorTicketsRemaining, { count: remaining })}
             </span>
             {limitEnabled && remaining > 0 && (
               <>
                 <span className="text-zinc-700">·</span>
                 <span className="text-zinc-500">
-                  이번 세션 <span className="text-orange-400 font-bold tabular-nums">{Math.min(drawLimit, remaining)}</span>회
+                  {fmt(t.simulatorSessionDrawsCount, { count: Math.min(drawLimit, remaining) })}
                 </span>
               </>
             )}
@@ -370,7 +541,7 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
               <>
                 <span className="text-zinc-700">·</span>
                 <span className="text-zinc-500">
-                  예상 비용 <span className="text-amber-400 font-bold tabular-nums">¥{estimatedCost.toLocaleString('ja-JP')}</span>
+                  {t.simulatorEstimatedCost} <span className="text-amber-400 font-bold tabular-nums">¥{estimatedCost.toLocaleString('ja-JP')}</span>
                 </span>
               </>
             )}
@@ -380,12 +551,12 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
             {hasRealCounts ? (
               <span className="text-[10px] text-emerald-400 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-                실제 구성 데이터 반영
+                {t.simulatorRealData}
               </span>
             ) : (
               <span className="text-[10px] text-zinc-500 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 inline-block" />
-                추정 구성 (kujimap 데이터 미등록)
+                {t.simulatorEstimatedData}
               </span>
             )}
           </div>
@@ -395,7 +566,7 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
             disabled={remaining === 0}
             className="w-full py-3.5 rounded-full bg-orange-500 hover:bg-orange-400 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-bold text-sm transition-colors shadow-lg active:scale-[0.98]"
           >
-            {remaining === 0 ? '뽑을 티켓이 없습니다' : '시작하기'}
+            {remaining === 0 ? t.simulatorNoTickets : t.simulatorStart}
           </button>
         </div>
       </div>
@@ -501,7 +672,11 @@ function TicketCard({ ticket, onReveal }: { ticket: Ticket; onReveal: (t: Ticket
 
 // ── RevealOverlay ─────────────────────────────────────────────────────────────
 
-function RevealOverlay({ ticket, onComplete }: { ticket: Ticket; onComplete: () => void }) {
+function RevealOverlay({ ticket, onComplete, totalForGrade }: {
+  ticket: Ticket
+  onComplete: () => void
+  totalForGrade: number
+}) {
   const { t, locale } = useLanguage()
   const [phase, setPhase] = useState<'sealed' | 'revealed'>('sealed')
   const [dragProgress, setDragProgress] = useState(0)
@@ -517,15 +692,21 @@ function RevealOverlay({ ticket, onComplete }: { ticket: Ticket; onComplete: () 
   const isHighTier = ticket.grade === 'A賞' || ticket.grade === 'ラストワン賞'
   const isLastOne = ticket.grade === 'ラストワン賞'
 
+  // 희귀도 판정: 전체 개수 기준
+  const isRare    = totalForGrade > 0 && totalForGrade <= 3
+  const isRainbow = isRare && ticket.grade === 'A賞'
+
   const triggerReveal = useCallback(() => {
     isDragging.current = false
     setIsSnapping(true)
     setDragProgress(1)
     setTimeout(() => {
       setPhase('revealed')
-      setSparkles(generateSparkles(ticket.grade))
+      if (isRainbow) setSparkles(generateRainbowSparkles())
+      else if (isRare) setSparkles(generateRareSparkles(ticket.grade))
+      else setSparkles(generateSparkles(ticket.grade))
     }, 320)
-  }, [ticket.grade])
+  }, [ticket.grade, isRainbow, isRare])
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (phase === 'revealed') return
@@ -557,18 +738,74 @@ function RevealOverlay({ ticket, onComplete }: { ticket: Ticket; onComplete: () 
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex flex-col items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.88)' }}
+      className="fixed inset-0 z-[60] flex flex-col items-center justify-center overflow-hidden"
+      style={{ background: isRainbow && phase === 'revealed' ? 'rgba(0,0,0,0.92)' : 'rgba(0,0,0,0.88)' }}
     >
-      {/* Grade glow behind card */}
-      {phase === 'revealed' && (
+      {/* ── Rainbow screen wash (A賞 rare only) ── */}
+      {phase === 'revealed' && isRainbow && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: 'linear-gradient(270deg,#ff0000,#ff6600,#ffcc00,#00ff44,#00ccff,#0044ff,#cc00ff,#ff0000)',
+            backgroundSize: '400% 400%',
+            animation: 'kuji-rainbow-screen 3s ease infinite',
+          }}
+        />
+      )}
+
+      {/* ── Glow behind card ── */}
+      {phase === 'revealed' && isRainbow && (
+        <>
+          {/* Outer rotating rainbow orb */}
+          <div className="absolute pointer-events-none" style={{ width: 700, height: 600 }}>
+            <div style={{
+              width: '100%', height: '100%',
+              background: 'conic-gradient(from 0deg, #ff0000, #ff9900, #ffff00, #00ff00, #00ccff, #0000ff, #cc00ff, #ff0000)',
+              filter: 'blur(70px)',
+              opacity: 0.55,
+              animation: 'kuji-rainbow-spin 3s linear infinite',
+            }} />
+          </div>
+          {/* Inner counter-rotating orb */}
+          <div className="absolute pointer-events-none" style={{ width: 500, height: 420 }}>
+            <div style={{
+              width: '100%', height: '100%',
+              background: 'conic-gradient(from 180deg, #ff6600, #ffff00, #00ff44, #00ccff, #cc00ff, #ff0066, #ff6600)',
+              filter: 'blur(55px)',
+              opacity: 0.5,
+              animation: 'kuji-rainbow-spin 2s linear infinite reverse',
+            }} />
+          </div>
+          {/* Core white-hot glow */}
+          <div className="absolute rounded-full pointer-events-none" style={{
+            width: 300, height: 220,
+            background: 'radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,220,100,0.5) 40%, transparent 70%)',
+            filter: 'blur(30px)',
+            animation: 'kuji-rare-pulse 0.8s ease-in-out infinite',
+          }} />
+        </>
+      )}
+      {phase === 'revealed' && isRare && !isRainbow && (
+        <>
+          <div className="absolute rounded-full blur-3xl pointer-events-none" style={{
+            width: 560, height: 420,
+            background: style.glow,
+            opacity: 0.75,
+            animation: 'kuji-rare-pulse 1s ease-in-out infinite',
+          }} />
+          <div className="absolute rounded-full pointer-events-none" style={{
+            width: 300, height: 220,
+            background: `radial-gradient(circle, white 0%, ${style.glow} 50%, transparent 70%)`,
+            filter: 'blur(25px)',
+            opacity: 0.6,
+            animation: 'kuji-rare-pulse 0.9s 0.2s ease-in-out infinite',
+          }} />
+        </>
+      )}
+      {phase === 'revealed' && !isRare && (
         <div
           className="absolute rounded-full blur-3xl opacity-50 pointer-events-none"
-          style={{
-            width: 400, height: 300,
-            background: style.glow,
-            animation: 'none',
-          }}
+          style={{ width: 400, height: 300, background: style.glow }}
         />
       )}
 
@@ -582,9 +819,30 @@ function RevealOverlay({ ticket, onComplete }: { ticket: Ticket; onComplete: () 
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
+        {/* ── Rainbow border (A賞 rare) ── */}
+        {phase === 'revealed' && isRainbow && (
+          <div style={{
+            position: 'absolute', inset: -5, borderRadius: 22,
+            background: 'linear-gradient(270deg,#ff0000,#ff9900,#ffff00,#00ff44,#00ccff,#0044ff,#cc00ff,#ff0099,#ff0000)',
+            backgroundSize: '300% 100%',
+            animation: 'kuji-rainbow-flow 1.2s linear infinite',
+            zIndex: 0,
+          }} />
+        )}
+        {/* ── Rare pulsing border (non-rainbow rare) ── */}
+        {phase === 'revealed' && isRare && !isRainbow && (
+          <div style={{
+            position: 'absolute', inset: -4, borderRadius: 21,
+            background: style.glow,
+            animation: 'kuji-rare-border-pulse 0.8s ease-in-out infinite',
+            zIndex: 0,
+          }} />
+        )}
+
         {/* ── Prize back face (always present, revealed from left) ── */}
         <div
-          className={`absolute inset-0 rounded-2xl overflow-hidden bg-white dark:bg-zinc-900 border-2 ${style.border} flex flex-col items-center justify-center gap-2 p-3 shadow-2xl ${isLastOne ? 'ring-4 ring-yellow-400 ring-offset-2 ring-offset-black' : ''}`}
+          className={`absolute inset-0 rounded-2xl overflow-hidden bg-white dark:bg-zinc-900 border-2 ${isRainbow ? 'border-transparent' : style.border} flex flex-col items-center justify-center gap-2 p-3 shadow-2xl ${isLastOne ? 'ring-4 ring-yellow-400 ring-offset-2 ring-offset-black' : ''}`}
+          style={{ zIndex: 1 }}
         >
           {/* Shine sweep */}
           {phase === 'revealed' && (
@@ -636,7 +894,7 @@ function RevealOverlay({ ticket, onComplete }: { ticket: Ticket; onComplete: () 
             style={{
               transform: `translateX(${dragProgress * 100}%)`,
               transition: isSnapping ? 'transform 0.3s ease-out' : 'none',
-              zIndex: 2,
+              zIndex: 3,
             }}
           >
             <TicketFront />
@@ -665,16 +923,33 @@ function RevealOverlay({ ticket, onComplete }: { ticket: Ticket; onComplete: () 
         ))}
 
         {/* ── Grade flash ── */}
-        {phase === 'revealed' && (
+        {phase === 'revealed' && !isRainbow && (
           <div
-            className={`absolute inset-0 rounded-2xl pointer-events-none`}
+            className="absolute inset-0 rounded-2xl pointer-events-none"
             style={{
               background: style.glow,
               opacity: 0,
-              animation: 'kuji-flash 0.55s ease-out forwards',
+              animation: `kuji-flash ${isRare ? '0.7s' : '0.55s'} ease-out forwards`,
               zIndex: 5,
             }}
           />
+        )}
+        {/* ── Rainbow flash (A賞 rare) ── */}
+        {phase === 'revealed' && isRainbow && (
+          <>
+            <div className="absolute inset-0 rounded-2xl pointer-events-none" style={{
+              background: 'linear-gradient(135deg,#ff0000,#ffcc00,#00ff88,#00ccff,#cc00ff)',
+              opacity: 0,
+              animation: 'kuji-flash 0.8s ease-out forwards',
+              zIndex: 5,
+            }} />
+            <div className="absolute inset-0 rounded-2xl pointer-events-none" style={{
+              background: 'white',
+              opacity: 0,
+              animation: 'kuji-flash 0.4s 0.05s ease-out forwards',
+              zIndex: 6,
+            }} />
+          </>
         )}
       </div>
 
@@ -770,8 +1045,9 @@ function DrawnPanel({ drawn, locale }: { drawn: Ticket[]; locale: string }) {
     return [...map.entries()]
   }, [presetDrawn])
 
-  const myLabel    = locale === 'ko' ? '내가 뽑은 결과' : locale === 'en' ? 'My draws'   : '引いた結果'
-  const preLabel   = locale === 'ko' ? '기존 뽑힌 결과' : locale === 'en' ? 'Pre-drawn'  : '設定済み'
+  const { t } = useLanguage()
+  const myLabel  = t.simulatorMyDraws
+  const preLabel = t.simulatorPreDrawnSection
 
   return (
     <div className="flex flex-col gap-0 h-full overflow-hidden">
@@ -793,7 +1069,7 @@ function DrawnPanel({ drawn, locale }: { drawn: Ticket[]; locale: string }) {
               </span>
             )
           })}
-          {sessionDrawn.length === 0 && <span className="text-xs text-zinc-500 italic">아직 없음</span>}
+          {sessionDrawn.length === 0 && <span className="text-xs text-zinc-500 italic">{t.simulatorNoDrawnYet}</span>}
         </div>
       </div>
 
@@ -830,7 +1106,7 @@ function DrawnPanel({ drawn, locale }: { drawn: Ticket[]; locale: string }) {
             </div>
           </>
         ) : (
-          <span className="text-xs text-zinc-600 italic">설정에서 뽑힌 티켓 없음</span>
+          <span className="text-xs text-zinc-600 italic">{t.simulatorPreDrawnEmpty}</span>
         )}
       </div>
     </div>
@@ -840,6 +1116,7 @@ function DrawnPanel({ drawn, locale }: { drawn: Ticket[]; locale: string }) {
 // ── LastOne Overlay ───────────────────────────────────────────────────────────
 
 function LastOneOverlay({ prize, locale, onClose }: { prize: Prize; locale: string; onClose: () => void }) {
+  const { t } = useLanguage()
   const [visible, setVisible] = useState(false)
   const [sparkles, setSparkles] = useState<SparkleData[]>([])
   const style = GRADE_STYLE['ラストワン賞']
@@ -934,7 +1211,7 @@ function LastOneOverlay({ prize, locale, onClose }: { prize: Prize; locale: stri
 
       {/* Subtitle */}
       <p className={`mt-4 text-sm text-amber-300/80 text-center transition-all duration-700 delay-300 ${visible ? 'opacity-100' : 'opacity-0'}`}>
-        마지막 1장을 뽑은 행운의 주인공!
+        {t.simulatorLastOneMsg}
       </p>
 
       <button
@@ -943,6 +1220,195 @@ function LastOneOverlay({ prize, locale, onClose }: { prize: Prize; locale: stri
       >
         확인
       </button>
+    </div>
+  )
+}
+
+// ── ProbabilityModal ─────────────────────────────────────────────────────────
+
+function ProbabilityModal({ tickets, onClose }: { tickets: Ticket[]; onClose: () => void }) {
+  const { t } = useLanguage()
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  const stats = useMemo(() => {
+    const map = new Map<string, { total: number; remaining: number; prize: Prize }>()
+    for (const tk of tickets) {
+      if (tk.grade === 'ラストワン賞') continue
+      const s = map.get(tk.grade)
+      if (s) {
+        s.total++
+        if (!tk.drawn) s.remaining++
+      } else {
+        map.set(tk.grade, { total: 1, remaining: tk.drawn ? 0 : 1, prize: tk.prize })
+      }
+    }
+    const totalRemaining = [...map.values()].reduce((s, v) => s + v.remaining, 0)
+    return [...map.entries()]
+      .map(([grade, s]) => ({
+        grade,
+        remaining: s.remaining,
+        total: s.total,
+        prize: s.prize,
+        prob: totalRemaining > 0 ? (s.remaining / totalRemaining) * 100 : 0,
+      }))
+      .sort((a, b) => a.grade.localeCompare(b.grade))
+  }, [tickets])
+
+  const totalRemaining = useMemo(() => stats.reduce((s, g) => s + g.remaining, 0), [stats])
+  const maxProb = Math.max(...stats.map(s => s.prob), 1)
+
+  // 선택된 등급들의 합산 확률
+  const selectedStats = useMemo(
+    () => stats.filter(s => selected.has(s.grade)),
+    [stats, selected]
+  )
+  const combinedProb = selectedStats.reduce((s, g) => s + g.prob, 0)
+  const combinedRemaining = selectedStats.reduce((s, g) => s + g.remaining, 0)
+
+  function toggleGrade(grade: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(grade)) next.delete(grade)
+      else next.add(grade)
+      return next
+    })
+  }
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center p-0 sm:p-4"
+      style={{ background: 'rgba(0,0,0,0.75)' }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full sm:max-w-md bg-zinc-900 sm:rounded-2xl rounded-t-2xl border border-zinc-700 shadow-2xl flex flex-col overflow-hidden"
+        style={{ maxHeight: '85vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 flex-shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-white">{t.simulatorProbTitle}</h2>
+            <p className="text-xs text-zinc-500 mt-0.5">{fmt(t.simulatorProbSubtitle, { count: totalRemaining })}</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 transition-colors p-1">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* 합산 확률 패널 */}
+        {selected.size > 0 && (
+          <div className="flex-shrink-0 mx-4 mt-4 p-4 rounded-xl bg-zinc-800 border border-zinc-600">
+            {/* 선택된 배지들 */}
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {selectedStats.map(s => (
+                <span key={s.grade} className={`text-xs font-black px-2.5 py-1 rounded-full ${(GRADE_STYLE[s.grade] ?? DEFAULT_STYLE).badge}`}>
+                  {getGradeLetter(s.grade)}賞
+                </span>
+              ))}
+              <span className="text-xs text-zinc-500 self-center">{t.simulatorProbCombined}</span>
+            </div>
+            {/* 합산 확률 */}
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-4xl font-black tabular-nums text-white">
+                  {combinedProb.toFixed(1)}<span className="text-2xl text-zinc-400">%</span>
+                </p>
+                <p className="text-xs text-zinc-500 mt-1">{fmt(t.simulatorProbRemainingInfo, { remaining: combinedRemaining, total: totalRemaining })}</p>
+              </div>
+              {/* 개별 확률 합산 표시 */}
+              {selected.size > 1 && (
+                <div className="text-right text-[10px] text-zinc-600 space-y-0.5">
+                  {selectedStats.map(s => (
+                    <p key={s.grade}>{getGradeLetter(s.grade)}賞 {s.prob.toFixed(1)}%</p>
+                  ))}
+                  <p className="text-zinc-500 border-t border-zinc-700 pt-0.5">= {combinedProb.toFixed(1)}%</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Grade list */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2">
+          {stats.map(({ grade, remaining, total, prize, prob }) => {
+            const style = GRADE_STYLE[grade] ?? DEFAULT_STYLE
+            const letter = getGradeLetter(grade)
+            const isSelected = selected.has(grade)
+            const isZero = remaining === 0
+            return (
+              <button
+                key={grade}
+                onClick={() => !isZero && toggleGrade(grade)}
+                disabled={isZero}
+                className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
+                  isSelected
+                    ? 'border-zinc-400 bg-zinc-700/80'
+                    : isZero
+                    ? 'border-zinc-800 bg-zinc-800/30 opacity-40 cursor-default'
+                    : 'border-zinc-800 bg-zinc-800/50 hover:border-zinc-600 hover:bg-zinc-800'
+                }`}
+              >
+                {/* 체크 인디케이터 */}
+                <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+                  isSelected ? 'border-white bg-white' : 'border-zinc-600'
+                }`}>
+                  {isSelected && (
+                    <svg className="w-2.5 h-2.5 text-zinc-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+
+                {/* 배지 */}
+                <span className={`text-xs font-black px-2 py-1 rounded-full flex-shrink-0 ${style.badge}`}>
+                  {letter}賞
+                </span>
+
+                {/* 상품명 + 바 */}
+                <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                  <p className="text-xs text-zinc-400 truncate">{prize.name}</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1.5 rounded-full bg-zinc-700 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{ width: `${(prob / maxProb) * 100}%`, background: style.glow }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-zinc-500 tabular-nums flex-shrink-0">{remaining}/{total}</span>
+                  </div>
+                </div>
+
+                {/* 개별 확률 */}
+                <div className="flex-shrink-0 text-right min-w-[48px]">
+                  <span className={`text-base font-bold tabular-nums ${isSelected ? 'text-white' : 'text-zinc-300'}`}>{prob.toFixed(1)}</span>
+                  <span className="text-xs text-zinc-500">%</span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex-shrink-0 px-4 py-3 border-t border-zinc-800 flex items-center justify-between">
+          <p className="text-[10px] text-zinc-600">{t.simulatorProbHint}</p>
+          {selected.size > 0 && (
+            <button
+              onClick={() => setSelected(new Set())}
+              className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              {t.simulatorProbClear}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -963,6 +1429,8 @@ export default function SimulatorModal({ product, prizes, onClose }: {
   const [toastKey, setToastKey] = useState(0)
   const [toastPrize, setToastPrize] = useState<Prize | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [panelTab, setPanelTab] = useState<'status' | 'results'>('status')
+  const [showProbability, setShowProbability] = useState(false)
   const [showLastOne, setShowLastOne] = useState(false)
   const [sessionDraws, setSessionDraws] = useState(0)
 
@@ -983,6 +1451,13 @@ export default function SimulatorModal({ product, prizes, onClose }: {
   }
 
   const drawn = useMemo(() => tickets.filter(tk => tk.drawn), [tickets])
+
+  // 등급별 전체 티켓 수 (drawn 포함) — 희귀도 판정에 사용
+  const gradeTotals = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const tk of tickets) map.set(tk.grade, (map.get(tk.grade) ?? 0) + 1)
+    return map
+  }, [tickets])
   const remaining = tickets.length - drawn.length
   const isFinished = remaining === 0
   const drawsLeft = config.drawLimit !== null ? config.drawLimit - sessionDraws : null
@@ -1056,7 +1531,16 @@ export default function SimulatorModal({ product, prizes, onClose }: {
     <div className="fixed inset-0 z-50 flex bg-zinc-950">
       {/* Reveal overlay */}
       {revealTicket && (
-        <RevealOverlay ticket={revealTicket} onComplete={handleRevealComplete} />
+        <RevealOverlay
+          ticket={revealTicket}
+          onComplete={handleRevealComplete}
+          totalForGrade={gradeTotals.get(revealTicket.grade) ?? 0}
+        />
+      )}
+
+      {/* Probability modal */}
+      {showProbability && (
+        <ProbabilityModal tickets={tickets} onClose={() => setShowProbability(false)} />
       )}
 
       {/* Last One bonus overlay */}
@@ -1079,13 +1563,19 @@ export default function SimulatorModal({ product, prizes, onClose }: {
               <span className="text-xs text-zinc-500 tabular-nums">{drawn.length} / {tickets.length}</span>
               {drawsLeft !== null && (
                 <span className={`text-[10px] tabular-nums font-semibold ${drawsLeft <= 3 ? 'text-red-400' : 'text-orange-400'}`}>
-                  세션 {drawsLeft}회 남음
+                  {fmt(t.simulatorSessionLeft, { count: drawsLeft })}
                 </span>
               )}
               {totalCost && (
                 <span className="text-xs font-semibold text-amber-400 tabular-nums">¥{totalCost}</span>
               )}
             </div>
+            <button
+              onClick={() => setShowProbability(true)}
+              className="text-xs px-3 py-1 rounded-full border border-zinc-700 text-zinc-400 hover:border-emerald-500 hover:text-emerald-400 transition-colors"
+            >
+              {t.simulatorProbButton}
+            </button>
             <button
               onClick={() => setPanelOpen(v => !v)}
               className={`text-xs px-3 py-1 rounded-full border transition-colors ${panelOpen ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'}`}
@@ -1096,7 +1586,7 @@ export default function SimulatorModal({ product, prizes, onClose }: {
               onClick={() => setPhase('setup')}
               className="text-xs px-3 py-1 rounded-full border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 transition-colors"
             >
-              설정
+              {t.simulatorSetupButton}
             </button>
             <button
               onClick={reset}
@@ -1106,6 +1596,9 @@ export default function SimulatorModal({ product, prizes, onClose }: {
             </button>
           </div>
         </div>
+
+        {/* Grade status bar */}
+        <GradeStatusBar tickets={tickets} />
 
         {/* Ticket board */}
         <div className="flex-1 relative overflow-hidden">
@@ -1162,21 +1655,21 @@ export default function SimulatorModal({ product, prizes, onClose }: {
         {sessionDone && !isFinished && (
           <div className="flex-shrink-0 p-3 bg-zinc-950 border-t border-zinc-800 flex flex-col items-center gap-2">
             <p className="text-sm text-zinc-400">
-              설정한 <span className="text-white font-bold">{config.drawLimit}회</span> 완료
-              {totalCost && <> · <span className="text-amber-400 font-bold">¥{totalCost}</span> 사용</>}
+              {fmt(t.simulatorSessionDone, { count: config.drawLimit ?? 0 })}
+              {totalCost && <> · <span className="text-amber-400 font-bold">¥{totalCost}</span> {t.simulatorCostUsed}</>}
             </p>
             <div className="flex gap-2 w-full">
               <button
                 onClick={() => setPhase('setup')}
                 className="flex-1 py-2.5 rounded-full border border-zinc-700 text-zinc-300 hover:border-zinc-500 text-sm font-medium transition-colors"
               >
-                설정 변경
+                {t.simulatorChangeSetup}
               </button>
               <button
                 onClick={reset}
                 className="flex-1 py-2.5 rounded-full bg-orange-500 hover:bg-orange-400 text-white font-bold text-sm transition-colors"
               >
-                같은 설정으로 다시
+                {t.simulatorSameAgain}
               </button>
             </div>
           </div>
@@ -1186,15 +1679,32 @@ export default function SimulatorModal({ product, prizes, onClose }: {
       {/* Results side panel (desktop) */}
       <div className={`hidden sm:block flex-shrink-0 bg-zinc-900 border-l border-zinc-800 transition-all duration-300 overflow-hidden ${panelOpen ? 'w-72' : 'w-0'}`}>
         <div className="p-4 h-full flex flex-col gap-3 overflow-hidden" style={{ width: 288 }}>
+          {/* Panel header + close */}
           <div className="flex items-center justify-between flex-shrink-0">
-            <h3 className="text-sm font-bold text-zinc-200">{t.simulatorResults}</h3>
+            <div className="flex gap-1 p-0.5 bg-zinc-800 rounded-lg">
+              <button
+                onClick={() => setPanelTab('status')}
+                className={`text-xs px-3 py-1 rounded-md font-semibold transition-colors ${panelTab === 'status' ? 'bg-zinc-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+              >
+                현황판
+              </button>
+              <button
+                onClick={() => setPanelTab('results')}
+                className={`text-xs px-3 py-1 rounded-md font-semibold transition-colors ${panelTab === 'results' ? 'bg-zinc-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+              >
+                {t.simulatorResults}
+              </button>
+            </div>
             <button onClick={() => setPanelOpen(false)} className="text-zinc-500 hover:text-zinc-300 transition-colors">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <DrawnPanel drawn={drawn} locale={locale} />
+          {panelTab === 'status'
+            ? <GradeStatusPanel tickets={tickets} />
+            : <DrawnPanel drawn={drawn} locale={locale} />
+          }
         </div>
       </div>
 
@@ -1203,23 +1713,40 @@ export default function SimulatorModal({ product, prizes, onClose }: {
         <div className="sm:hidden fixed inset-0 z-40 flex flex-col justify-end" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={() => setPanelOpen(false)}>
           <div
             className="bg-zinc-900 rounded-t-2xl border-t border-zinc-700 flex flex-col"
-            style={{ maxHeight: '70vh' }}
+            style={{ maxHeight: '75vh' }}
             onClick={e => e.stopPropagation()}
           >
             {/* Handle */}
             <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
               <div className="w-10 h-1 rounded-full bg-zinc-600" />
             </div>
+            {/* Tabs + close */}
             <div className="flex items-center justify-between px-4 py-2 flex-shrink-0">
-              <h3 className="text-sm font-bold text-zinc-200">{t.simulatorResults}</h3>
+              <div className="flex gap-1 p-0.5 bg-zinc-800 rounded-lg">
+                <button
+                  onClick={() => setPanelTab('status')}
+                  className={`text-xs px-3 py-1 rounded-md font-semibold transition-colors ${panelTab === 'status' ? 'bg-zinc-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+                >
+                  {t.simulatorStatusTab}
+                </button>
+                <button
+                  onClick={() => setPanelTab('results')}
+                  className={`text-xs px-3 py-1 rounded-md font-semibold transition-colors ${panelTab === 'results' ? 'bg-zinc-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+                >
+                  {t.simulatorResults}
+                </button>
+              </div>
               <button onClick={() => setPanelOpen(false)} className="text-zinc-500 hover:text-zinc-300 transition-colors">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="flex-1 overflow-hidden px-4 pb-6 min-h-0">
-              <DrawnPanel drawn={drawn} locale={locale} />
+            <div className="flex-1 overflow-hidden px-4 pb-6 min-h-0 flex flex-col">
+              {panelTab === 'status'
+                ? <GradeStatusPanel tickets={tickets} />
+                : <DrawnPanel drawn={drawn} locale={locale} />
+              }
             </div>
           </div>
         </div>
