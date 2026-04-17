@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 type LogEntry = {
   type: 'progress' | 'done' | 'error' | 'warning'
@@ -25,6 +26,7 @@ const TYPE_LABELS: Record<Notice['type'], string> = {
 }
 
 export default function AdminPage() {
+  const router = useRouter()
   const [status, setStatus] = useState<Status>('idle')
   const [percent, setPercent] = useState(0)
   const [logs, setLogs] = useState<LogEntry[]>([])
@@ -139,15 +141,29 @@ export default function AdminPage() {
 
   const isRunning = status === 'running'
 
+  async function handleLogout() {
+    await fetch('/api/admin/logout', { method: 'POST' })
+    router.push('/admin/login')
+    router.refresh()
+  }
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-12 px-4">
       <div className="max-w-2xl mx-auto space-y-6">
         {/* 헤더 */}
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">데이터 업데이트</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            1kuji.com 에서 신규 상품을 스크랩하여 kuji_all_products.json 에 추가합니다.
-          </p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">데이터 업데이트</h1>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+              1kuji.com 에서 신규 상품을 스크랩하여 kuji_all_products.json 에 추가합니다.
+            </p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-sm border border-zinc-300 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-red-400 hover:text-red-500 transition-colors"
+          >
+            로그아웃
+          </button>
         </div>
 
         {/* 버튼 */}

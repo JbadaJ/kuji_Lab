@@ -181,6 +181,99 @@ function generateSparkles(grade: string): SparkleData[] {
   })
 }
 
+// ── Full-screen fireworks ─────────────────────────────────────────────────────
+
+interface FireworkParticle {
+  id: number
+  ox: number      // origin left (vw %)
+  oy: number      // origin top  (vh %)
+  tx: number      // translate x (px)
+  ty: number      // translate y (px)
+  color: string
+  size: number
+  delay: number
+  duration: number
+  diamond: boolean
+}
+
+function generateFullscreenFireworks(grade: string, isRare: boolean, isRainbow: boolean): FireworkParticle[] {
+  const colors  = isRainbow ? RAINBOW_COLORS : (SPARKLE_COLORS[grade] ?? ['#fff', '#ffcc00'])
+  const bursts  = isRainbow ? 9 : isRare ? 6 : 4
+  const perBurst = isRainbow ? 22 : isRare ? 16 : 11
+  const result: FireworkParticle[] = []
+  let id = 0
+
+  for (let b = 0; b < bursts; b++) {
+    const ox = 7 + Math.random() * 86
+    const oy = 5 + Math.random() * 82
+    const burstDelay = b * 0.14
+
+    for (let p = 0; p < perBurst; p++) {
+      const angle = (p / perBurst) * Math.PI * 2 + Math.random() * 0.7
+      const dist  = (isRainbow ? 130 : isRare ? 95 : 65) + Math.random() * 110
+      result.push({
+        id: id++,
+        ox, oy,
+        tx: Math.cos(angle) * dist,
+        ty: Math.sin(angle) * dist,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        size: isRainbow ? 7 + Math.random() * 9 : isRare ? 5 + Math.random() * 7 : 4 + Math.random() * 6,
+        delay: burstDelay + Math.random() * 0.18,
+        duration: 0.75 + Math.random() * 0.55,
+        diamond: Math.random() > 0.45,
+      })
+    }
+  }
+  return result
+}
+
+// ── Sound effects via Web Audio API ──────────────────────────────────────────
+
+function playDrawSound(grade: string, isRare: boolean, isRainbow: boolean) {
+  if (typeof window === 'undefined') return
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    const ctx = new Ctx()
+
+    const note = (freq: number, type: OscillatorType, start: number, dur: number, vol: number, freqEnd?: number) => {
+      const osc  = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.type = type
+      osc.frequency.setValueAtTime(freq, start)
+      if (freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, start + dur)
+      gain.gain.setValueAtTime(0, start)
+      gain.gain.linearRampToValueAtTime(vol, start + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + dur)
+      osc.start(start); osc.stop(start + dur + 0.01)
+    }
+
+    const now = ctx.currentTime
+
+    if (isRainbow) {
+      // 화려한 팡파르 — 상승 아르페지오 + 하모니 + 반짝임
+      const fanfare  = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1568.00]
+      const harmony  = [392.00, 493.88, 587.33, 783.99]
+      fanfare.forEach((f, i) => note(f, 'sine', now + i * 0.09, 0.6, 0.3))
+      harmony.forEach((f, i) => note(f, 'sine', now + i * 0.09 + 0.04, 0.5, 0.14))
+      note(2093, 'sine', now + 0.5, 0.9, 0.15)
+      note(2637, 'sine', now + 0.65, 0.7, 0.1)
+      note(880, 'sawtooth', now, 0.07, 0.06, 440)
+    } else if (isRare) {
+      // 3음 상승 아르페지오
+      const arp = [440, 554.37, 659.25]
+      arp.forEach((f, i) => note(f, 'sine', now + i * 0.13, 0.5, 0.26))
+      note(1318.51, 'sine', now + 0.35, 0.55, 0.13)
+    } else {
+      // 짧고 경쾌한 팝
+      note(700, 'sine', now, 0.18, 0.32, 220)
+      note(1100, 'sine', now + 0.01, 0.07, 0.14)
+    }
+
+    setTimeout(() => ctx.close(), 3000)
+  } catch { /* silently ignore — AudioContext may be blocked */ }
+}
+
 // ── GradeStatusBar (compact always-visible strip) ────────────────────────────
 
 function GradeStatusBar({ tickets }: { tickets: Ticket[] }) {
@@ -682,6 +775,7 @@ function RevealOverlay({ ticket, onComplete, totalForGrade }: {
   const [dragProgress, setDragProgress] = useState(0)
   const [isSnapping, setIsSnapping] = useState(false)
   const [sparkles, setSparkles] = useState<SparkleData[]>([])
+  const [fireworks, setFireworks] = useState<FireworkParticle[]>([])
 
   const isDragging = useRef(false)
   const startX = useRef(0)
@@ -705,6 +799,8 @@ function RevealOverlay({ ticket, onComplete, totalForGrade }: {
       if (isRainbow) setSparkles(generateRainbowSparkles())
       else if (isRare) setSparkles(generateRareSparkles(ticket.grade))
       else setSparkles(generateSparkles(ticket.grade))
+      setFireworks(generateFullscreenFireworks(ticket.grade, isRare, isRainbow))
+      playDrawSound(ticket.grade, isRare, isRainbow)
     }, 320)
   }, [ticket.grade, isRainbow, isRare])
 
@@ -952,6 +1048,29 @@ function RevealOverlay({ ticket, onComplete, totalForGrade }: {
           </>
         )}
       </div>
+
+      {/* Full-screen firework particles */}
+      {fireworks.map(fw => (
+        <div
+          key={fw.id}
+          style={{
+            position: 'fixed',
+            left: `${fw.ox}vw`,
+            top: `${fw.oy}vh`,
+            width: fw.size,
+            height: fw.size,
+            background: fw.color,
+            borderRadius: fw.diamond ? '2px' : '50%',
+            animation: `kuji-firework ${fw.duration}s ${fw.delay}s ease-out forwards`,
+            '--tx': `${fw.tx}px`,
+            '--ty': `${fw.ty}px`,
+            zIndex: 61,
+            pointerEvents: 'none',
+            rotate: fw.diamond ? '45deg' : undefined,
+            boxShadow: `0 0 ${fw.size * 1.5}px ${fw.color}`,
+          } as React.CSSProperties}
+        />
+      ))}
 
       {/* Drag hint */}
       {phase === 'sealed' && (
