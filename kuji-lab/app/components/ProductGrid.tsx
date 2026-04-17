@@ -9,6 +9,7 @@ import { IP_CATEGORIES, IP_LIST, getDisplayName } from '@/lib/aliases'
 import { useLanguage } from '@/app/contexts/LanguageContext'
 import { fmt } from '@/lib/i18n'
 import { useTranslate } from '@/app/hooks/useTranslate'
+import { useWishlist } from '@/app/hooks/useWishlist'
 
 interface Props {
   products: ProductSummary[]
@@ -57,56 +58,81 @@ function SaleBadge({ types }: { types: string[] }) {
   )
 }
 
-function ProductCard({ product, displayTitle }: { product: ProductSummary; displayTitle: string }) {
+function ProductCard({ product, displayTitle, isWishlisted, onToggleWishlist }: {
+  product: ProductSummary
+  displayTitle: string
+  isWishlisted: boolean
+  onToggleWishlist: (slug: string) => void
+}) {
   const { t } = useLanguage()
   return (
-    <Link
-      href={`/products/${product.slug}`}
-      className="group flex flex-col rounded-xl overflow-hidden bg-white dark:bg-zinc-800 shadow-sm hover:shadow-md transition-shadow border border-zinc-100 dark:border-zinc-700"
-    >
-      <div className="relative aspect-video bg-zinc-100 dark:bg-zinc-700">
-        {product.banner_image_url ? (
-          <Image
-            src={product.banner_image_url}
-            alt={product.title}
-            fill
-            className="object-cover group-hover:scale-[1.02] transition-transform duration-300"
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-zinc-400 dark:text-zinc-500 text-sm">
-            {t.gridNoImage}
-          </div>
-        )}
-      </div>
-      <div className="flex flex-col gap-1.5 p-3 flex-1">
-        <p className="text-sm font-medium leading-snug line-clamp-2 text-zinc-800 dark:text-zinc-100">
-          {displayTitle}
-        </p>
-        <div className="flex items-center justify-between mt-auto pt-1">
-          <div className="flex flex-col gap-1">
-            {product.release_date && (
-              <span className="text-xs text-zinc-400 dark:text-zinc-500">
-                {product.release_date}
-              </span>
-            )}
-            <div className="flex items-center gap-2">
-              {product.price_yen && (
-                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                  ¥{product.price_yen.toLocaleString()}
-                </span>
-              )}
-              {product.prize_count > 0 && (
-                <span className="text-xs text-zinc-400 dark:text-zinc-500">
-                  {product.prize_count}種
-                </span>
-              )}
+    <div className="group relative flex flex-col rounded-xl overflow-hidden bg-white dark:bg-zinc-800 shadow-sm hover:shadow-md transition-shadow border border-zinc-100 dark:border-zinc-700">
+      <Link href={`/products/${product.slug}`} className="flex flex-col flex-1">
+        <div className="relative aspect-video bg-zinc-100 dark:bg-zinc-700">
+          {product.banner_image_url ? (
+            <Image
+              src={product.banner_image_url}
+              alt={product.title}
+              fill
+              className="object-cover group-hover:scale-[1.02] transition-transform duration-300"
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-zinc-400 dark:text-zinc-500 text-sm">
+              {t.gridNoImage}
             </div>
-          </div>
-          <SaleBadge types={product.sale_type} />
+          )}
         </div>
-      </div>
-    </Link>
+        <div className="flex flex-col gap-1.5 p-3 flex-1">
+          <p className="text-sm font-medium leading-snug line-clamp-2 text-zinc-800 dark:text-zinc-100">
+            {displayTitle}
+          </p>
+          <div className="flex items-center justify-between mt-auto pt-1">
+            <div className="flex flex-col gap-1">
+              {product.release_date && (
+                <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                  {product.release_date}
+                </span>
+              )}
+              <div className="flex items-center gap-2">
+                {product.price_yen && (
+                  <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    ¥{product.price_yen.toLocaleString()}
+                  </span>
+                )}
+                {product.prize_count > 0 && (
+                  <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                    {product.prize_count}種
+                  </span>
+                )}
+              </div>
+            </div>
+            <SaleBadge types={product.sale_type} />
+          </div>
+        </div>
+      </Link>
+
+      {/* Wishlist heart button */}
+      <button
+        onClick={e => { e.stopPropagation(); onToggleWishlist(product.slug) }}
+        aria-label={isWishlisted ? t.wishlistRemove : t.wishlistAdd}
+        className={`absolute top-2 right-2 z-10 w-8 h-8 rounded-full flex items-center justify-center shadow-md transition-all duration-150 hover:scale-110 active:scale-95 ${
+          isWishlisted
+            ? 'bg-white dark:bg-zinc-700 opacity-100'
+            : 'bg-white/80 dark:bg-zinc-800/80 opacity-0 group-hover:opacity-100'
+        }`}
+      >
+        {isWishlisted ? (
+          <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+          </svg>
+        ) : (
+          <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+        )}
+      </button>
+    </div>
   )
 }
 
@@ -223,6 +249,8 @@ function IpSelectorPanel({ selected, onSelect, onClose, availableIds }: IpPanelP
 
 export default function ProductGrid({ products, years }: Props) {
   const { t, locale } = useLanguage()
+  const { wishlist, toggle: toggleWishlist, has: isWishlisted } = useWishlist()
+  const [activeTab, setActiveTab] = useState<'all' | 'wishlist'>('all')
 
   // URL 파라미터에서 초기값 읽기 (클라이언트 전용 lazy init)
   const [query, setQuery] = useState(() =>
@@ -287,8 +315,14 @@ export default function ProductGrid({ products, years }: Props) {
     return result
   }, [query, yearFilter, monthFilter, saleFilter, ipFilter, products, fuse])
 
-  const visible = filtered.slice(0, page * PAGE_SIZE)
-  const hasMore = visible.length < filtered.length
+  // 찜 탭일 때는 위시리스트 상품만 표시, 다른 필터 무시
+  const displayProducts = useMemo(
+    () => activeTab === 'wishlist' ? products.filter(p => wishlist.includes(p.slug)) : filtered,
+    [activeTab, wishlist, filtered, products]
+  )
+
+  const visible = displayProducts.slice(0, page * PAGE_SIZE)
+  const hasMore = visible.length < displayProducts.length
   const selectedIpEntry = ipFilter ? IP_LIST.find(e => e.id === ipFilter) : null
   const selectedIpName = selectedIpEntry ? getDisplayName(selectedIpEntry, locale) : null
 
@@ -309,6 +343,38 @@ export default function ProductGrid({ products, years }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* 전체 / 찜 목록 탭 */}
+      <div className="flex gap-1 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl self-start">
+        <button
+          onClick={() => { setActiveTab('all'); setPage(1) }}
+          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+            activeTab === 'all'
+              ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-800 dark:text-zinc-100'
+              : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+          }`}
+        >
+          {t.filterAll}
+        </button>
+        <button
+          onClick={() => { setActiveTab('wishlist'); setPage(1) }}
+          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${
+            activeTab === 'wishlist'
+              ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-800 dark:text-zinc-100'
+              : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+          }`}
+        >
+          <svg className="w-3.5 h-3.5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+          </svg>
+          {t.wishlistTab}
+          {wishlist.length > 0 && (
+            <span className="min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold bg-red-500 text-white rounded-full px-1 leading-none">
+              {wishlist.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Search bar */}
       <div className="relative">
         <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -323,8 +389,8 @@ export default function ProductGrid({ products, years }: Props) {
         />
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col gap-2">
+      {/* Filters — 찜 탭에선 숨김 */}
+      <div className={`flex flex-col gap-2 ${activeTab === 'wishlist' ? 'hidden' : ''}`}>
         {/* Year */}
         <div className="flex flex-wrap gap-2 items-center">
           <span className="text-xs text-zinc-500 dark:text-zinc-400 w-12 shrink-0">{t.filterYear}</span>
@@ -401,7 +467,9 @@ export default function ProductGrid({ products, years }: Props) {
       {/* Result count */}
       <p className="text-xs text-zinc-400 dark:text-zinc-500 flex items-center gap-2">
         <span>
-          {fmt(t.gridCount, { count: filtered.length })}
+          {activeTab === 'wishlist'
+            ? fmt(t.wishlistCount, { count: displayProducts.length })
+            : fmt(t.gridCount, { count: filtered.length })}
           {selectedIpName && <span> — {selectedIpName}</span>}
           {query && <span> — {fmt(t.gridSearchSuffix, { query })}</span>}
         </span>
@@ -424,8 +492,17 @@ export default function ProductGrid({ products, years }: Props) {
               key={p.slug}
               product={p}
               displayTitle={translatedTitles[i] ?? p.title}
+              isWishlisted={isWishlisted(p.slug)}
+              onToggleWishlist={toggleWishlist}
             />
           ))}
+        </div>
+      ) : activeTab === 'wishlist' ? (
+        <div className="py-20 flex flex-col items-center gap-3 text-zinc-400 dark:text-zinc-500">
+          <svg className="w-12 h-12 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+          <p>{t.wishlistEmpty}</p>
         </div>
       ) : (
         <div className="py-20 text-center text-zinc-400 dark:text-zinc-500">{t.gridEmpty}</div>

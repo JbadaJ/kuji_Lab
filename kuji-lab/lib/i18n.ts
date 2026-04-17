@@ -120,6 +120,33 @@ export interface Translations {
   categoryTokusatsu: string
   categoryIdol: string
   categoryWestern: string
+  // Wishlist
+  wishlistTab: string
+  wishlistEmpty: string
+  wishlistCount: string       // {count}
+  wishlistAdd: string
+  wishlistRemove: string
+  // Auto Draw
+  autoDrawButton: string
+  autoDrawTitle: string
+  autoDrawGoalLabel: string
+  autoDrawGoalGrade: string
+  autoDrawGoalAll: string
+  autoDrawGoalCount: string
+  autoDrawGoalGradeSelect: string
+  autoDrawSpeedLabel: string
+  autoDrawSpeedFast: string
+  autoDrawSpeedNormal: string
+  autoDrawSpeedSlow: string
+  autoDrawStart: string
+  autoDrawCancel: string
+  autoDrawProgress: string    // {count}
+  autoDrawResultTitle: string
+  autoDrawResultTotal: string // {count}
+  autoDrawResultCost: string
+  autoDrawResultGoalMet: string
+  autoDrawResultNoMore: string
+  autoDrawClose: string
 }
 
 export const translations: Record<Locale, Translations> = {
@@ -222,6 +249,31 @@ export const translations: Record<Locale, Translations> = {
     categoryTokusatsu: '특촬/어린이',
     categoryIdol: '아이돌/음악',
     categoryWestern: '디즈니/서양',
+    wishlistTab: '찜 목록',
+    wishlistEmpty: '찜한 상품이 없습니다.',
+    wishlistCount: '{count}개 찜',
+    wishlistAdd: '찜하기',
+    wishlistRemove: '찜 해제',
+    autoDrawButton: '자동 뽑기',
+    autoDrawTitle: '자동 뽑기 설정',
+    autoDrawGoalLabel: '뽑기 목표',
+    autoDrawGoalGrade: '목표 등급이 나올 때까지',
+    autoDrawGoalAll: '전부 뽑기',
+    autoDrawGoalCount: 'N번 뽑기',
+    autoDrawGoalGradeSelect: '목표 등급 선택',
+    autoDrawSpeedLabel: '속도',
+    autoDrawSpeedFast: '빠름',
+    autoDrawSpeedNormal: '보통',
+    autoDrawSpeedSlow: '느림',
+    autoDrawStart: '자동 뽑기 시작',
+    autoDrawCancel: '중단',
+    autoDrawProgress: '{count}번 뽑는 중...',
+    autoDrawResultTitle: '자동 뽑기 결과',
+    autoDrawResultTotal: '총 {count}번 뽑음',
+    autoDrawResultCost: '총 비용',
+    autoDrawResultGoalMet: '목표 달성!',
+    autoDrawResultNoMore: '티켓 소진',
+    autoDrawClose: '닫기',
   },
   ja: {
     footerDisclaimer: 'このサイトはIchiban Kujiのファンが作った非公式ファンサイトです。すべての画像・商品情報の著作権はBANDAI SPIRITSおよび各原著作権者に帰属します。',
@@ -322,6 +374,31 @@ export const translations: Record<Locale, Translations> = {
     categoryTokusatsu: '特撮／子供向け',
     categoryIdol: 'アイドル／音楽',
     categoryWestern: 'ディズニー／洋画',
+    wishlistTab: 'お気に入り',
+    wishlistEmpty: 'お気に入りがありません。',
+    wishlistCount: 'お気に入り{count}件',
+    wishlistAdd: 'お気に入り追加',
+    wishlistRemove: 'お気に入り解除',
+    autoDrawButton: '自動抽選',
+    autoDrawTitle: '自動抽選設定',
+    autoDrawGoalLabel: '目標',
+    autoDrawGoalGrade: '目標等級が出るまで',
+    autoDrawGoalAll: 'すべて引く',
+    autoDrawGoalCount: 'N回引く',
+    autoDrawGoalGradeSelect: '目標等級を選択',
+    autoDrawSpeedLabel: 'スピード',
+    autoDrawSpeedFast: '速い',
+    autoDrawSpeedNormal: '普通',
+    autoDrawSpeedSlow: '遅い',
+    autoDrawStart: '自動抽選開始',
+    autoDrawCancel: '中断',
+    autoDrawProgress: '{count}回抽選中...',
+    autoDrawResultTitle: '自動抽選結果',
+    autoDrawResultTotal: '合計{count}回',
+    autoDrawResultCost: '合計費用',
+    autoDrawResultGoalMet: '目標達成！',
+    autoDrawResultNoMore: 'チケット終了',
+    autoDrawClose: '閉じる',
   },
   en: {
     footerDisclaimer: 'This is an unofficial fan site created by an Ichiban Kuji fan. All images and product information are copyright of BANDAI SPIRITS and their respective owners.',
@@ -422,6 +499,31 @@ export const translations: Record<Locale, Translations> = {
     categoryTokusatsu: 'Tokusatsu / Kids',
     categoryIdol: 'Idol / Music',
     categoryWestern: 'Disney / Western',
+    wishlistTab: 'Wishlist',
+    wishlistEmpty: 'No wishlisted items.',
+    wishlistCount: '{count} wishlisted',
+    wishlistAdd: 'Add to wishlist',
+    wishlistRemove: 'Remove from wishlist',
+    autoDrawButton: 'Auto Draw',
+    autoDrawTitle: 'Auto Draw Settings',
+    autoDrawGoalLabel: 'Draw Goal',
+    autoDrawGoalGrade: 'Until target grade',
+    autoDrawGoalAll: 'Draw all',
+    autoDrawGoalCount: 'Draw N times',
+    autoDrawGoalGradeSelect: 'Select target grade',
+    autoDrawSpeedLabel: 'Speed',
+    autoDrawSpeedFast: 'Fast',
+    autoDrawSpeedNormal: 'Normal',
+    autoDrawSpeedSlow: 'Slow',
+    autoDrawStart: 'Start Auto Draw',
+    autoDrawCancel: 'Cancel',
+    autoDrawProgress: 'Drawing {count}...',
+    autoDrawResultTitle: 'Auto Draw Results',
+    autoDrawResultTotal: '{count} total draws',
+    autoDrawResultCost: 'Total Cost',
+    autoDrawResultGoalMet: 'Goal reached!',
+    autoDrawResultNoMore: 'Tickets exhausted',
+    autoDrawClose: 'Close',
   },
 }
 
