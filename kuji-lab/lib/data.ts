@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs'
+import { readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
 import type { KujiProduct, Prize, ProductSummary } from '@/types/kuji'
 import { getAliases, getIpTags } from './aliases'
@@ -29,8 +29,16 @@ let _cache: KujiProduct[] | null = null
 
 function loadAll(): KujiProduct[] {
   if (_cache) return _cache
-  const filePath = join(process.cwd(), 'data', 'kuji_all_products.json')
-  _cache = JSON.parse(readFileSync(filePath, 'utf-8')) as KujiProduct[]
+  const dataDir = join(process.cwd(), 'data')
+  const files = readdirSync(dataDir)
+    .filter(f => /^kuji_products_\w+\.json$/.test(f))
+    .sort()
+  const all: KujiProduct[] = []
+  for (const file of files) {
+    const products = JSON.parse(readFileSync(join(dataDir, file), 'utf-8')) as KujiProduct[]
+    all.push(...products)
+  }
+  _cache = all
   return _cache
 }
 

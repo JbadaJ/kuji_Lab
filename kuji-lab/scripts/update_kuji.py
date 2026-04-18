@@ -21,8 +21,34 @@ except ImportError:
     }), flush=True)
     sys.exit(1)
 
-DATA_FILE = Path(__file__).parent.parent / "data" / "kuji_all_products.json"
+DATA_DIR = Path(__file__).parent.parent / "data"
 BASE_URL = "https://1kuji.com"
+
+
+def load_all_products() -> list:
+    """data/ 디렉토리의 kuji_products_*.json 파일을 모두 읽어 병합."""
+    all_products = []
+    for filepath in sorted(DATA_DIR.glob("kuji_products_*.json")):
+        with open(filepath, "r", encoding="utf-8") as f:
+            all_products.extend(json.load(f))
+    return all_products
+
+
+def save_by_year(products: list) -> None:
+    """상품 목록을 release_date 연도별로 분리하여 저장."""
+    by_year: dict = {}
+    for p in products:
+        y = "unknown"
+        if p.get("release_date"):
+            m = re.search(r"(\d{4})年", p["release_date"])
+            if m:
+                y = m.group(1)
+        by_year.setdefault(y, []).append(p)
+
+    for year, year_products in by_year.items():
+        filepath = DATA_DIR / f"kuji_products_{year}.json"
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(year_products, f, ensure_ascii=False, separators=(",", ":"))
 
 
 def log(msg_type: str, **kwargs):
@@ -232,12 +258,11 @@ async def scrape_product_detail(page, slug: str, fallback_title: str = "") -> di
 async def main():
     log("progress", message="기존 데이터 로드 중...", percent=0)
 
-    if not DATA_FILE.exists():
-        log("error", message=f"데이터 파일 없음: {DATA_FILE}")
+    if not any(DATA_DIR.glob("kuji_products_*.json")):
+        log("error", message=f"데이터 파일 없음: {DATA_DIR}/kuji_products_*.json")
         sys.exit(1)
 
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
-        existing: list = json.load(f)
+    existing: list = load_all_products()
 
     existing_by_slug: dict = {p["slug"]: p for p in existing}
 
@@ -320,8 +345,7 @@ async def main():
         merged = [p for p in existing if p["slug"] not in updated_slugs]
         merged.extend(updated_products)
         merged.extend(new_products)
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(merged, f, ensure_ascii=False, separators=(",", ":"))
+        save_by_year(merged)
         log("done",
             message=f"✓ 신규 {len(new_products)}개 추가, 기존 {len(updated_products)}개 업데이트 (총 {len(merged)}개)",
             added=len(new_products),
