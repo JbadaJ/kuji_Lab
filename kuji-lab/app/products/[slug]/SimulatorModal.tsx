@@ -5,6 +5,7 @@ import Image from 'next/image'
 import type { KujiProduct, Prize } from '@/types/kuji'
 import { useLanguage } from '@/app/contexts/LanguageContext'
 import { fmt, translateGrade } from '@/lib/i18n'
+import { useDrawHistory, type DrawSession } from '@/app/hooks/useDrawHistory'
 
 // ── Types & helpers ───────────────────────────────────────────────────────────
 
@@ -1247,6 +1248,87 @@ function DrawnPanel({ drawn, locale }: { drawn: Ticket[]; locale: string }) {
   )
 }
 
+// ── HistoryPanel ──────────────────────────────────────────────────────────────
+
+function HistoryPanel({ sessions, onClear, locale }: {
+  sessions: DrawSession[]
+  onClear: () => void
+  locale: string
+}) {
+  const { t } = useLanguage()
+
+  if (sessions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center flex-1 gap-2 text-zinc-500">
+        <svg className="w-8 h-8 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p className="text-xs">{t.historyEmpty}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2 flex-1 min-h-0 overflow-hidden">
+      <div className="flex items-center justify-between flex-shrink-0">
+        <span className="text-[10px] text-zinc-500 uppercase tracking-widest">
+          {fmt(t.historySessionCount, { count: sessions.length })}
+        </span>
+        <button
+          onClick={onClear}
+          className="text-[10px] text-zinc-600 hover:text-red-400 transition-colors"
+        >
+          {t.historyClear}
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto flex flex-col gap-2 pr-1">
+        {sessions.map(session => {
+          const cost = session.priceYen ? session.totalDraws * session.priceYen : null
+          const gradeEntries = Object.entries(session.tally).sort((a, b) => a[0].localeCompare(b[0]))
+          const date = new Date(session.date)
+          const dateStr = date.toLocaleDateString(
+            locale === 'ja' ? 'ja-JP' : locale === 'ko' ? 'ko-KR' : 'en-US',
+            { month: 'short', day: 'numeric' }
+          ) + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          return (
+            <div key={session.id} className="flex flex-col gap-2 p-3 rounded-xl bg-zinc-800/60 border border-zinc-700/50">
+              <div className="flex items-start justify-between gap-1">
+                <p className="text-[11px] text-zinc-300 font-medium leading-tight truncate flex-1 min-w-0">{session.title}</p>
+                {session.finished && (
+                  <span className="text-[9px] text-emerald-400 font-bold flex-shrink-0 mt-0.5">{t.historyFinished}</span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-zinc-500">
+                <span>{dateStr}</span>
+                <span>·</span>
+                <span>{fmt(t.historyDrawCount, { count: session.totalDraws })}</span>
+                {cost && (
+                  <>
+                    <span>·</span>
+                    <span className="text-amber-400 font-semibold">¥{cost.toLocaleString('ja-JP')}</span>
+                  </>
+                )}
+              </div>
+              {gradeEntries.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {gradeEntries.map(([grade, count]) => {
+                    const style = GRADE_STYLE[grade] ?? DEFAULT_STYLE
+                    return (
+                      <span key={grade} className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${style.badge}`}>
+                        {getGradeLetter(grade)} ×{count}
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── LastOne Overlay ───────────────────────────────────────────────────────────
 
 function LastOneOverlay({ prize, locale, onClose }: { prize: Prize; locale: string; onClose: () => void }) {
@@ -1799,6 +1881,7 @@ export default function SimulatorModal({ product, prizes, onClose }: {
   onClose: () => void
 }) {
   const { t, locale } = useLanguage()
+  const { sessions: drawHistory, addSession, clearHistory } = useDrawHistory()
   const [phase, setPhase] = useState<'setup' | 'playing'>('setup')
   const [config, setConfig] = useState<SimulatorConfig>({ mode: 'default', preDrawn: {}, drawLimit: null })
   const [tickets, setTickets] = useState<Ticket[]>([])
@@ -1807,7 +1890,7 @@ export default function SimulatorModal({ product, prizes, onClose }: {
   const [toastKey, setToastKey] = useState(0)
   const [toastPrize, setToastPrize] = useState<Prize | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
-  const [panelTab, setPanelTab] = useState<'status' | 'results'>('status')
+  const [panelTab, setPanelTab] = useState<'status' | 'results' | 'history'>('status')
   const [showProbability, setShowProbability] = useState(false)
   const [showLastOne, setShowLastOne] = useState(false)
   const [sessionDraws, setSessionDraws] = useState(0)
@@ -1897,7 +1980,27 @@ export default function SimulatorModal({ product, prizes, onClose }: {
     openReveal(pick)
   }, [tickets, openReveal])
 
+  const saveCurrentSession = useCallback((currentTickets: Ticket[]) => {
+    const sessionDrawnTickets = currentTickets.filter(tk => tk.drawn && !tk.preset)
+    if (sessionDrawnTickets.length === 0) return
+    const tally: Record<string, number> = {}
+    for (const tk of sessionDrawnTickets) {
+      tally[tk.grade] = (tally[tk.grade] ?? 0) + 1
+    }
+    addSession({
+      id: `${Date.now()}`,
+      slug: product.slug,
+      title: product.title,
+      date: new Date().toISOString(),
+      totalDraws: sessionDrawnTickets.length,
+      priceYen: product.price_yen,
+      tally,
+      finished: currentTickets.filter(tk => !tk.drawn).length === 0,
+    })
+  }, [addSession, product])
+
   const reset = useCallback(() => {
+    saveCurrentSession(tickets)
     autoDrawActive.current = false
     setAutoDrawing(false)
     setTickets(buildTickets(prizes, config.preDrawn))
@@ -1906,7 +2009,12 @@ export default function SimulatorModal({ product, prizes, onClose }: {
     setShowLastOne(false)
     setSessionDraws(0)
     setResetCount(c => c + 1)
-  }, [prizes, config.preDrawn])
+  }, [prizes, config.preDrawn, tickets, saveCurrentSession])
+
+  const handleClose = useCallback(() => {
+    if (phase === 'playing') saveCurrentSession(tickets)
+    onClose()
+  }, [phase, tickets, saveCurrentSession, onClose])
 
   const startAutoDraw = useCallback((cfg: AutoDrawConfig) => {
     setShowAutoSetup(false)
@@ -2006,7 +2114,7 @@ export default function SimulatorModal({ product, prizes, onClose }: {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 bg-zinc-950 border-b border-zinc-800 flex-shrink-0">
-          <button onClick={onClose} className="text-zinc-400 hover:text-white transition-colors flex-shrink-0">
+          <button onClick={handleClose} className="text-zinc-400 hover:text-white transition-colors flex-shrink-0">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -2181,6 +2289,15 @@ export default function SimulatorModal({ product, prizes, onClose }: {
               >
                 {t.simulatorResults}
               </button>
+              <button
+                onClick={() => setPanelTab('history')}
+                className={`text-xs px-3 py-1 rounded-md font-semibold transition-colors ${panelTab === 'history' ? 'bg-zinc-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+              >
+                {t.historyTab}
+                {drawHistory.length > 0 && (
+                  <span className="ml-1 text-[9px] bg-orange-500 text-white rounded-full px-1">{drawHistory.length}</span>
+                )}
+              </button>
             </div>
             <button onClick={() => setPanelOpen(false)} className="text-zinc-500 hover:text-zinc-300 transition-colors">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2190,7 +2307,9 @@ export default function SimulatorModal({ product, prizes, onClose }: {
           </div>
           {panelTab === 'status'
             ? <GradeStatusPanel tickets={tickets} />
-            : <DrawnPanel drawn={drawn} locale={locale} />
+            : panelTab === 'results'
+            ? <DrawnPanel drawn={drawn} locale={locale} />
+            : <HistoryPanel sessions={drawHistory} onClear={clearHistory} locale={locale} />
           }
         </div>
       </div>
@@ -2222,6 +2341,15 @@ export default function SimulatorModal({ product, prizes, onClose }: {
                 >
                   {t.simulatorResults}
                 </button>
+                <button
+                  onClick={() => setPanelTab('history')}
+                  className={`text-xs px-3 py-1 rounded-md font-semibold transition-colors ${panelTab === 'history' ? 'bg-zinc-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+                >
+                  {t.historyTab}
+                  {drawHistory.length > 0 && (
+                    <span className="ml-1 text-[9px] bg-orange-500 text-white rounded-full px-1">{drawHistory.length}</span>
+                  )}
+                </button>
               </div>
               <button onClick={() => setPanelOpen(false)} className="text-zinc-500 hover:text-zinc-300 transition-colors">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2232,7 +2360,9 @@ export default function SimulatorModal({ product, prizes, onClose }: {
             <div className="flex-1 overflow-hidden px-4 pb-6 min-h-0 flex flex-col">
               {panelTab === 'status'
                 ? <GradeStatusPanel tickets={tickets} />
-                : <DrawnPanel drawn={drawn} locale={locale} />
+                : panelTab === 'results'
+                ? <DrawnPanel drawn={drawn} locale={locale} />
+                : <HistoryPanel sessions={drawHistory} onClear={clearHistory} locale={locale} />
               }
             </div>
           </div>

@@ -126,6 +126,13 @@ export interface Translations {
   wishlistCount: string       // {count}
   wishlistAdd: string
   wishlistRemove: string
+  // Draw History
+  historyTab: string
+  historyEmpty: string
+  historyDrawCount: string    // {count}
+  historyClear: string
+  historyFinished: string
+  historySessionCount: string // {count}
   // Auto Draw
   autoDrawButton: string
   autoDrawTitle: string
@@ -254,6 +261,12 @@ export const translations: Record<Locale, Translations> = {
     wishlistCount: '{count}개 찜',
     wishlistAdd: '찜하기',
     wishlistRemove: '찜 해제',
+    historyTab: '기록',
+    historyEmpty: '뽑기 기록이 없습니다',
+    historyDrawCount: '{count}회 뽑음',
+    historyClear: '기록 초기화',
+    historyFinished: '전체 완료',
+    historySessionCount: '총 {count}회',
     autoDrawButton: '자동 뽑기',
     autoDrawTitle: '자동 뽑기 설정',
     autoDrawGoalLabel: '뽑기 목표',
@@ -379,6 +392,12 @@ export const translations: Record<Locale, Translations> = {
     wishlistCount: 'お気に入り{count}件',
     wishlistAdd: 'お気に入り追加',
     wishlistRemove: 'お気に入り解除',
+    historyTab: '履歴',
+    historyEmpty: '記録がありません',
+    historyDrawCount: '{count}回抽選',
+    historyClear: '記録を削除',
+    historyFinished: '全完了',
+    historySessionCount: '合計{count}回',
     autoDrawButton: '自動抽選',
     autoDrawTitle: '自動抽選設定',
     autoDrawGoalLabel: '目標',
@@ -504,6 +523,12 @@ export const translations: Record<Locale, Translations> = {
     wishlistCount: '{count} wishlisted',
     wishlistAdd: 'Add to wishlist',
     wishlistRemove: 'Remove from wishlist',
+    historyTab: 'History',
+    historyEmpty: 'No draw history yet',
+    historyDrawCount: '{count} draws',
+    historyClear: 'Clear History',
+    historyFinished: 'All drawn',
+    historySessionCount: '{count} total',
     autoDrawButton: 'Auto Draw',
     autoDrawTitle: 'Auto Draw Settings',
     autoDrawGoalLabel: 'Draw Goal',
