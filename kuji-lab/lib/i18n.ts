@@ -154,6 +154,12 @@ export interface Translations {
   autoDrawResultGoalMet: string
   autoDrawResultNoMore: string
   autoDrawClose: string
+  // Auth
+  authSignIn: string
+  authSignOut: string
+  authSignInDesc: string
+  authSignInWith: string
+  authCancel: string
 }
 
 export const translations: Record<Locale, Translations> = {
@@ -287,6 +293,11 @@ export const translations: Record<Locale, Translations> = {
     autoDrawResultGoalMet: '목표 달성!',
     autoDrawResultNoMore: '티켓 소진',
     autoDrawClose: '닫기',
+    authSignIn: '로그인',
+    authSignOut: '로그아웃',
+    authSignInDesc: '소셜 계정으로 간편하게 로그인하세요.',
+    authSignInWith: '',
+    authCancel: '취소',
   },
   ja: {
     footerDisclaimer: 'このサイトはIchiban Kujiのファンが作った非公式ファンサイトです。すべての画像・商品情報の著作権はBANDAI SPIRITSおよび各原著作権者に帰属します。',
@@ -418,6 +429,11 @@ export const translations: Record<Locale, Translations> = {
     autoDrawResultGoalMet: '目標達成！',
     autoDrawResultNoMore: 'チケット終了',
     autoDrawClose: '閉じる',
+    authSignIn: 'ログイン',
+    authSignOut: 'ログアウト',
+    authSignInDesc: 'ソーシャルアカウントで簡単ログイン。',
+    authSignInWith: '',
+    authCancel: 'キャンセル',
   },
   en: {
     footerDisclaimer: 'This is an unofficial fan site created by an Ichiban Kuji fan. All images and product information are copyright of BANDAI SPIRITS and their respective owners.',
@@ -549,6 +565,11 @@ export const translations: Record<Locale, Translations> = {
     autoDrawResultGoalMet: 'Goal reached!',
     autoDrawResultNoMore: 'Tickets exhausted',
     autoDrawClose: 'Close',
+    authSignIn: 'Sign In',
+    authSignOut: 'Sign Out',
+    authSignInDesc: 'Sign in with your social account.',
+    authSignInWith: 'Sign in with',
+    authCancel: 'Cancel',
   },
 }
 

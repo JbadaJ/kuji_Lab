@@ -252,22 +252,30 @@ export default function ProductGrid({ products, years }: Props) {
   const { wishlist, toggle: toggleWishlist, has: isWishlisted } = useWishlist()
   const [activeTab, setActiveTab] = useState<'all' | 'wishlist'>('all')
 
-  // URL 파라미터에서 초기값 읽기 (클라이언트 전용 lazy init)
-  const [query, setQuery] = useState(() =>
-    typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('q') ?? '') : '')
-  const [yearFilter, setYearFilter] = useState(() =>
-    typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('year') ?? 'all') : 'all')
-  const [monthFilter, setMonthFilter] = useState(() =>
-    typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('month') ?? 'all') : 'all')
-  const [saleFilter, setSaleFilter] = useState(() =>
-    typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('type') ?? 'all') : 'all')
-  const [ipFilter, setIpFilter] = useState(() =>
-    typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('ip') ?? '') : '')
+  // 서버/클라이언트 모두 동일한 기본값으로 초기화 → hydration 불일치 방지
+  const [mounted, setMounted] = useState(false)
+  const [query, setQuery] = useState('')
+  const [yearFilter, setYearFilter] = useState('all')
+  const [monthFilter, setMonthFilter] = useState('all')
+  const [saleFilter, setSaleFilter] = useState('all')
+  const [ipFilter, setIpFilter] = useState('')
   const [ipPanelOpen, setIpPanelOpen] = useState(false)
   const [page, setPage] = useState(1)
 
-  // 필터 상태 → URL 동기화 (뒤로가기 시 상태 복원용)
+  // 마운트 후 URL 파라미터 읽기 (클라이언트 전용)
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    setQuery(params.get('q') ?? '')
+    setYearFilter(params.get('year') ?? 'all')
+    setMonthFilter(params.get('month') ?? 'all')
+    setSaleFilter(params.get('type') ?? 'all')
+    setIpFilter(params.get('ip') ?? '')
+    setMounted(true)
+  }, [])
+
+  // 필터 상태 → URL 동기화 (마운트 완료 후에만 실행, URL 덮어쓰기 방지)
+  useEffect(() => {
+    if (!mounted) return
     const params = new URLSearchParams()
     if (query) params.set('q', query)
     if (yearFilter !== 'all') params.set('year', yearFilter)
@@ -276,7 +284,7 @@ export default function ProductGrid({ products, years }: Props) {
     if (ipFilter) params.set('ip', ipFilter)
     const qs = params.toString()
     window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
-  }, [query, yearFilter, monthFilter, saleFilter, ipFilter])
+  }, [query, yearFilter, monthFilter, saleFilter, ipFilter, mounted])
   const ipButtonRef = useRef<HTMLDivElement>(null)
 
   const fuse = useMemo(
