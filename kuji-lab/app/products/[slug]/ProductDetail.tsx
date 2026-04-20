@@ -9,7 +9,31 @@ import { useLanguage } from '@/app/contexts/LanguageContext'
 import { fmt, translateGrade, translateVariants } from '@/lib/i18n'
 import { useTranslate } from '@/app/hooks/useTranslate'
 import LanguageSwitcher from '@/app/components/LanguageSwitcher'
-import SimulatorModal from './SimulatorModal'
+import SimulatorModal, { type SimulatorConfig } from './SimulatorModal'
+import type { SimSearchParams } from './page'
+
+function parseSimConfig(sp: SimSearchParams): SimulatorConfig | null {
+  if (!sp.sim) return null
+  const mode: SimulatorConfig['mode'] = (
+    sp.mode === 'random' || sp.mode === 'custom' ? sp.mode : 'default'
+  )
+  const preDrawn: Record<string, number> = {}
+  if (sp.pre) {
+    for (const part of sp.pre.split(',')) {
+      const colonIdx = part.lastIndexOf(':')
+      if (colonIdx > 0) {
+        const key = part.slice(0, colonIdx)
+        const count = parseInt(part.slice(colonIdx + 1), 10)
+        if (!isNaN(count) && count > 0) {
+          preDrawn[`${key}賞`] = count
+        }
+      }
+    }
+  }
+  const limitNum = sp.limit ? parseInt(sp.limit, 10) : NaN
+  const drawLimit = !isNaN(limitNum) && limitNum > 0 ? limitNum : null
+  return { mode, preDrawn, drawLimit }
+}
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────
 
@@ -183,10 +207,11 @@ function PrizeList({ prizes, locale, t, onImageClick }: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ProductDetail({ product }: { product: KujiProduct }) {
+export default function ProductDetail({ product, initialSim }: { product: KujiProduct; initialSim?: SimSearchParams }) {
   const { t, locale } = useLanguage()
   const router = useRouter()
-  const [simulatorOpen, setSimulatorOpen] = useState(false)
+  const initialConfig = useMemo(() => initialSim ? parseSimConfig(initialSim) : null, [initialSim])
+  const [simulatorOpen, setSimulatorOpen] = useState(() => !!initialConfig)
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null)
   const openLightbox = useCallback((src: string, alt: string) => setLightbox({ src, alt }), [])
   const closeLightbox = useCallback(() => setLightbox(null), [])
@@ -216,6 +241,7 @@ export default function ProductDetail({ product }: { product: KujiProduct }) {
           product={product}
           prizes={validPrizes}
           onClose={() => setSimulatorOpen(false)}
+          initialConfig={initialConfig ?? undefined}
         />
       )}
       {lightbox && <Lightbox src={lightbox.src} alt={lightbox.alt} onClose={closeLightbox} />}
@@ -302,7 +328,7 @@ export default function ProductDetail({ product }: { product: KujiProduct }) {
             </p>
           )}
 
-          <div className="pt-2">
+          <div className="pt-2 flex flex-wrap gap-2">
             <button
               onClick={() => setSimulatorOpen(true)}
               disabled={validPrizes.length === 0}
@@ -310,6 +336,12 @@ export default function ProductDetail({ product }: { product: KujiProduct }) {
             >
               {t.productSimulator}
             </button>
+            <a
+              href={`/room?slug=${product.slug}`}
+              className="px-6 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors"
+            >
+              같이 뽑기 🎴
+            </a>
           </div>
         </div>
 

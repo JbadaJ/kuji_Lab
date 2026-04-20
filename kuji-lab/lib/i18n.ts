@@ -160,6 +160,9 @@ export interface Translations {
   authSignInDesc: string
   authSignInWith: string
   authCancel: string
+  // Simulator — share
+  simulatorShareButton: string
+  simulatorShareCopied: string
 }
 
 export const translations: Record<Locale, Translations> = {
@@ -298,6 +301,8 @@ export const translations: Record<Locale, Translations> = {
     authSignInDesc: '소셜 계정으로 간편하게 로그인하세요.',
     authSignInWith: '',
     authCancel: '취소',
+    simulatorShareButton: '링크 복사',
+    simulatorShareCopied: '복사됨!',
   },
   ja: {
     footerDisclaimer: 'このサイトはIchiban Kujiのファンが作った非公式ファンサイトです。すべての画像・商品情報の著作権はBANDAI SPIRITSおよび各原著作権者に帰属します。',
@@ -434,6 +439,8 @@ export const translations: Record<Locale, Translations> = {
     authSignInDesc: 'ソーシャルアカウントで簡単ログイン。',
     authSignInWith: '',
     authCancel: 'キャンセル',
+    simulatorShareButton: 'リンクをコピー',
+    simulatorShareCopied: 'コピー完了!',
   },
   en: {
     footerDisclaimer: 'This is an unofficial fan site created by an Ichiban Kuji fan. All images and product information are copyright of BANDAI SPIRITS and their respective owners.',
@@ -570,6 +577,8 @@ export const translations: Record<Locale, Translations> = {
     authSignInDesc: 'Sign in with your social account.',
     authSignInWith: 'Sign in with',
     authCancel: 'Cancel',
+    simulatorShareButton: 'Copy Link',
+    simulatorShareCopied: 'Copied!',
   },
 }
 

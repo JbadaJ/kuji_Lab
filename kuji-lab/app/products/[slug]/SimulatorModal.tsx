@@ -49,10 +49,22 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-interface SimulatorConfig {
+export interface SimulatorConfig {
   mode: 'default' | 'random' | 'custom'
   preDrawn: Record<string, number>   // grade → already-drawn count
   drawLimit: number | null           // null = unlimited
+}
+
+function buildShareUrl(slug: string, mode: SimulatorConfig['mode'], preDrawn: Record<string, number>, drawLimit: number | null): string {
+  const params = new URLSearchParams({ sim: '1' })
+  if (mode !== 'default') params.set('mode', mode)
+  const preStr = Object.entries(preDrawn)
+    .filter(([, v]) => v > 0)
+    .map(([grade, count]) => `${grade.replace('賞', '')}:${count}`)
+    .join(',')
+  if (preStr) params.set('pre', preStr)
+  if (drawLimit !== null) params.set('limit', String(drawLimit))
+  return `${window.location.origin}/products/${slug}?${params.toString()}`
 }
 
 type AutoDrawGoal  = 'grade' | 'all' | 'count'
@@ -423,17 +435,19 @@ function GradeStatusPanel({ tickets }: { tickets: Ticket[] }) {
 
 // ── SetupScreen ───────────────────────────────────────────────────────────────
 
-function SetupScreen({ product, prizes, onStart, onClose }: {
+function SetupScreen({ product, prizes, onStart, onClose, initialConfig }: {
   product: KujiProduct
   prizes: Prize[]
   onStart: (config: SimulatorConfig) => void
   onClose: () => void
+  initialConfig?: SimulatorConfig
 }) {
   const { t } = useLanguage()
-  const [mode, setMode] = useState<SimulatorConfig['mode']>('default')
-  const [preDrawn, setPreDrawn] = useState<Record<string, number>>({})
-  const [limitEnabled, setLimitEnabled] = useState(false)
-  const [drawLimit, setDrawLimit] = useState(10)
+  const [mode, setMode] = useState<SimulatorConfig['mode']>(initialConfig?.mode ?? 'default')
+  const [preDrawn, setPreDrawn] = useState<Record<string, number>>(initialConfig?.preDrawn ?? {})
+  const [limitEnabled, setLimitEnabled] = useState(initialConfig?.drawLimit !== null && initialConfig?.drawLimit !== undefined)
+  const [drawLimit, setDrawLimit] = useState(initialConfig?.drawLimit ?? 10)
+  const [copied, setCopied] = useState(false)
 
   const gradeCounts = useMemo(() => getGradeCounts(prizes), [prizes])
   const totalPool = useMemo(() => gradeCounts.reduce((s, g) => s + g.total, 0), [gradeCounts])
@@ -468,6 +482,24 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
       }
     }
     onStart({ mode, preDrawn: finalPreDrawn, drawLimit: limitEnabled ? drawLimit : null })
+  }
+
+  function handleCopyUrl() {
+    const url = buildShareUrl(product.slug, mode, mode === 'custom' ? preDrawn : {}, limitEnabled ? drawLimit : null)
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(() => {
+      // fallback: select text in a temp input
+      const el = document.createElement('input')
+      el.value = url
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      document.body.removeChild(el)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
   }
 
   const MODES: { id: SimulatorConfig['mode']; label: string; sub: string }[] = [
@@ -670,13 +702,32 @@ function SetupScreen({ product, prizes, onStart, onClose }: {
             )}
           </div>
 
-          <button
-            onClick={handleStart}
-            disabled={remaining === 0}
-            className="w-full py-3.5 rounded-full bg-orange-500 hover:bg-orange-400 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-bold text-sm transition-colors shadow-lg active:scale-[0.98]"
-          >
-            {remaining === 0 ? t.simulatorNoTickets : t.simulatorStart}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleStart}
+              disabled={remaining === 0}
+              className="flex-1 py-3.5 rounded-full bg-orange-500 hover:bg-orange-400 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-bold text-sm transition-colors shadow-lg active:scale-[0.98]"
+            >
+              {remaining === 0 ? t.simulatorNoTickets : t.simulatorStart}
+            </button>
+            <button
+              onClick={handleCopyUrl}
+              title={t.simulatorShareButton}
+              className={`px-4 py-3.5 rounded-full border font-bold text-sm transition-colors flex-shrink-0 ${
+                copied
+                  ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                  : 'border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
+              }`}
+            >
+              {copied ? (
+                t.simulatorShareCopied
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1875,10 +1926,11 @@ function ProbabilityModal({ tickets, onClose }: { tickets: Ticket[]; onClose: ()
 
 // ── Main SimulatorModal ───────────────────────────────────────────────────────
 
-export default function SimulatorModal({ product, prizes, onClose }: {
+export default function SimulatorModal({ product, prizes, onClose, initialConfig }: {
   product: KujiProduct
   prizes: Prize[]
   onClose: () => void
+  initialConfig?: SimulatorConfig
 }) {
   const { t, locale } = useLanguage()
   const { sessions: drawHistory, addSession, clearHistory } = useDrawHistory()
@@ -2066,7 +2118,7 @@ export default function SimulatorModal({ product, prizes, onClose }: {
   const cols = 7
 
   if (phase === 'setup') {
-    return <SetupScreen product={product} prizes={prizes} onStart={handleSetupStart} onClose={onClose} />
+    return <SetupScreen product={product} prizes={prizes} onStart={handleSetupStart} onClose={onClose} initialConfig={initialConfig} />
   }
 
   return (
