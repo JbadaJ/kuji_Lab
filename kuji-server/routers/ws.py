@@ -17,7 +17,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, status
@@ -98,26 +99,17 @@ def _cancel_timeout(code: str) -> None:
 # ── Turn helpers ──────────────────────────────────────────────────────────────
 
 async def _announce_turn(code: str, meta: dict) -> None:
-    """Send your_turn to current player and broadcast who's up."""
+    """Send your_turn to current player."""
     queue = await room_manager._get_queue(code)
     if not queue:
         return
     current = queue[0]
-    timeout_at = (
-        datetime.now(timezone.utc).isoformat()
-    )
-    import datetime as dt
-    timeout_at_ts = (
-        dt.datetime.now(dt.timezone.utc)
-        + dt.timedelta(seconds=TURN_TIMEOUT_SECONDS)
-    ).isoformat()
-
+    timeout_at = (datetime.now(timezone.utc) + timedelta(seconds=TURN_TIMEOUT_SECONDS)).isoformat()
     draws_per_turn = int(meta.get("draws_per_turn", 1))
-
     await _unicast(code, current, make_event(
         "your_turn",
         draws_allowed=draws_per_turn,
-        timeout_at=timeout_at_ts,
+        timeout_at=timeout_at,
     ))
     _schedule_timeout(code, current)
 
@@ -170,22 +162,17 @@ async def room_ws(
     _connections.setdefault(code, {})[user_id] = websocket
 
     # Join / reconnect
-    await room_manager.join_room(code, user_id, user_name, user_avatar)
+    member = await room_manager.join_room(code, user_id, user_name, user_avatar)
+    if member is None:
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        return
 
     # Send current state to the newcomer
     snapshot = await room_manager.get_snapshot(code, user_id)
     await _send(websocket, make_event("room_state", **snapshot.model_dump()))
 
     # Broadcast member_joined to others
-    member_info = {
-        "user_id": user_id,
-        "name": user_name,
-        "avatar": user_avatar,
-        "joined_at": snapshot.members[-1].joined_at if snapshot.members else "",
-        "draws_total": 0,
-        "connected": True,
-    }
-    await _broadcast(code, make_event("member_joined", member=member_info), exclude=user_id)
+    await _broadcast(code, make_event("member_joined", member=member.model_dump()), exclude=user_id)
 
     try:
         async for raw in websocket.iter_text():
@@ -249,23 +236,23 @@ async def room_ws(
                 count = min(count, tickets_left)
                 _cancel_timeout(code)
 
+                game_over = False
                 for _ in range(count):
                     picked = await room_manager.pick_random_grade(code)
                     if not picked:
                         break
                     grade, _ = picked
 
-                    # Get prize info for this grade from the pool to fill result
+                    prize_name, prize_image = await room_manager.get_prize_for_grade(code, grade)
                     seq = await room_manager.get_draw_seq(code) + 1
 
-                    # Minimal prize name from pool (no product data on server)
                     result = await room_manager.draw_ticket(
                         code=code,
                         user_id=user_id,
                         seq=seq,
                         grade=grade,
-                        prize_name=grade,      # enriched by frontend from its own data
-                        prize_image=None,
+                        prize_name=prize_name,
+                        prize_image=prize_image,
                     )
                     if result is None:
                         break
@@ -277,20 +264,18 @@ async def room_ws(
                         pool=updated_pool,
                     ))
 
-                    # Check if pool is now empty
                     new_left = int((await room_manager._get_meta(code)).get("tickets_left", 0))
                     if new_left == 0:
                         await room_manager.finish_game(code)
-                        # Compute summary
                         results_all = await room_manager._get_results(code, limit=10000)
-                        from collections import Counter
                         tally = Counter(r.grade for r in results_all)
                         summary = [{"grade": g, "count": c} for g, c in sorted(tally.items())]
                         await _broadcast(code, make_event("game_finished", results_summary=summary))
-                        _cancel_timeout(code)
-                        return
+                        game_over = True
+                        break
 
-                await _do_advance_turn(code, user_id, reason="draw")
+                if not game_over:
+                    await _do_advance_turn(code, user_id, reason="draw")
 
             # ── skip_turn ──
             elif msg_type == "skip_turn":

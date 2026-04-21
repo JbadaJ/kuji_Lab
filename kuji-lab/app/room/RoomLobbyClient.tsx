@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Session } from 'next-auth'
 import type { KujiProduct } from '@/types/kuji'
@@ -17,17 +17,44 @@ function ProductSearch({
   onSelect: (p: KujiProduct) => void
 }) {
   const [query, setQuery] = useState('')
+  const [yearFilter, setYearFilter] = useState('all')
+  const [monthFilter, setMonthFilter] = useState('all')
+  const [availableYears, setAvailableYears] = useState<string[]>([])
+  const [availableMonths, setAvailableMonths] = useState<string[]>([])
   const [results, setResults] = useState<KujiProduct[]>([])
   const [loading, setLoading] = useState(false)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const search = useCallback((q: string) => {
+  // 연도 목록 로드
+  useEffect(() => {
+    fetch('/api/years')
+      .then(r => r.json())
+      .then(d => setAvailableYears(d.years ?? []))
+      .catch(() => {})
+  }, [])
+
+  // 연도 변경 시 월 목록 로드
+  useEffect(() => {
+    if (yearFilter === 'all') { setAvailableMonths([]); setMonthFilter('all'); return }
+    fetch(`/api/years?year=${yearFilter}`)
+      .then(r => r.json())
+      .then(d => { setAvailableMonths(d.months ?? []); setMonthFilter('all') })
+      .catch(() => {})
+  }, [yearFilter])
+
+  const doSearch = useCallback((q: string, year: string, month: string) => {
     if (debounce.current) clearTimeout(debounce.current)
-    if (!q.trim()) { setResults([]); return }
+    if (!q.trim() && year === 'all') { setResults([]); return }
+
+    const delay = q.trim() ? 300 : 0
     debounce.current = setTimeout(async () => {
       setLoading(true)
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=8`)
+        const params = new URLSearchParams({ limit: '20' })
+        if (q.trim()) params.set('q', q)
+        if (year !== 'all') params.set('year', year)
+        if (month !== 'all') params.set('month', month)
+        const res = await fetch(`/api/search?${params}`)
         const data = await res.json()
         setResults(data.results ?? [])
       } catch {
@@ -35,34 +62,68 @@ function ProductSearch({
       } finally {
         setLoading(false)
       }
-    }, 300)
+    }, delay)
   }, [])
+
+  // 필터 변경 시 재검색
+  useEffect(() => { doSearch(query, yearFilter, monthFilter) }, [yearFilter, monthFilter])
+
+  const selectClass = 'flex-1 px-2 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500'
 
   return (
     <div className="space-y-2">
+      {/* 연도 / 월 필터 */}
+      <div className="flex gap-2">
+        <select
+          className={selectClass}
+          value={yearFilter}
+          onChange={e => setYearFilter(e.target.value)}
+        >
+          <option value="all">연도 전체</option>
+          {availableYears.map(y => <option key={y} value={y}>{y}년</option>)}
+        </select>
+        {yearFilter !== 'all' && (
+          <select
+            className={selectClass}
+            value={monthFilter}
+            onChange={e => { setMonthFilter(e.target.value); doSearch(query, yearFilter, e.target.value) }}
+          >
+            <option value="all">월 전체</option>
+            {availableMonths.map(m => <option key={m} value={m}>{parseInt(m)}월</option>)}
+          </select>
+        )}
+      </div>
+
+      {/* 텍스트 검색 */}
       <input
         className="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
-        placeholder="一番くじ タイトルで検索..."
+        placeholder="타이틀로 검색..."
         value={query}
-        onChange={e => { setQuery(e.target.value); search(e.target.value) }}
+        onChange={e => { setQuery(e.target.value); doSearch(e.target.value, yearFilter, monthFilter) }}
       />
+
       {loading && <p className="text-xs text-zinc-500 px-1">검색 중...</p>}
+
       {results.length > 0 && (
-        <div className="rounded-xl border border-zinc-700 overflow-hidden divide-y divide-zinc-700/60">
+        <div className="rounded-xl border border-zinc-700 overflow-hidden divide-y divide-zinc-700/60 max-h-64 overflow-y-auto">
           {results.map(p => (
             <button
               key={p.slug}
               onClick={() => { onSelect(p); setQuery(p.title); setResults([]) }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 bg-zinc-900 hover:bg-zinc-800 transition-colors text-left"
+              className="w-full flex items-center gap-3 px-4 py-3 bg-zinc-900 hover:bg-zinc-800 transition-colors text-left"
             >
               {p.banner_image_url && (
-                <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-zinc-800">
-                  <Image src={p.banner_image_url} alt={p.title} fill className="object-cover" sizes="40px" />
+                <div className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-zinc-800">
+                  <Image src={p.banner_image_url} alt={p.title} fill className="object-cover" sizes="64px" />
                 </div>
               )}
-              <div className="min-w-0">
-                <p className="text-sm text-white truncate">{p.title}</p>
-                <p className="text-[10px] text-zinc-500">{p.prize_count}종 · {p.price_yen ? `¥${p.price_yen}` : '가격 미정'}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white leading-snug line-clamp-2">{p.title}</p>
+                <p className="text-xs text-zinc-400 mt-1">
+                  {p.release_date ?? ''}
+                  {p.prize_count > 0 && ` · ${p.prize_count}종`}
+                  {p.price_yen ? ` · ¥${p.price_yen}` : ''}
+                </p>
               </div>
             </button>
           ))}

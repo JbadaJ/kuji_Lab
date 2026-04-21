@@ -3,6 +3,7 @@ Ticket pool initialization — mirrors the TypeScript buildPool() logic
 in SimulatorModal.tsx exactly so estimates match between solo and room mode.
 """
 from __future__ import annotations
+import re
 
 
 def get_grade(prize: dict) -> str:
@@ -10,9 +11,25 @@ def get_grade(prize: dict) -> str:
     grade = prize.get("grade", "")
     if grade:
         return grade
-    import re
     m = re.match(r"^([A-Z]賞|ラストワン賞)", prize.get("full_name", ""))
     return m.group(1) if m else ""
+
+
+def build_prize_info(prizes: list[dict]) -> dict[str, dict]:
+    """
+    Return {grade: {"name": str, "image": str|None}} using the first prize
+    encountered for each grade. Used to populate draw result prize_name/image.
+    """
+    info: dict[str, dict] = {}
+    for p in prizes:
+        grade = get_grade(p)
+        if grade and grade not in info:
+            images = p.get("images") or []
+            info[grade] = {
+                "name": p.get("name") or p.get("full_name") or grade,
+                "image": images[0] if images else None,
+            }
+    return info
 
 
 def build_pool(prizes: list[dict]) -> dict[str, int]:

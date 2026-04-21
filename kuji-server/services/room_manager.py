@@ -20,7 +20,7 @@ from typing import Optional
 from redis_client import get_redis
 from models.room import MemberInfo, DrawResult, RoomSnapshot, GradeTally
 from services.code_gen import generate_code
-from services.ticket_pool import build_pool
+from services.ticket_pool import build_pool, build_prize_info
 
 
 def _now() -> str:
@@ -73,7 +73,7 @@ async def _get_queue(code: str) -> list[str]:
     return await r.lrange(_key(code, "queue"), 0, -1)
 
 
-async def _get_results(code: str, limit: int = 50) -> list[DrawResult]:
+async def _get_results(code: str, limit: int = 200) -> list[DrawResult]:
     r = get_redis()
     raw = await r.lrange(_key(code, "results"), -limit, -1)
     return [DrawResult(**json.loads(v)) for v in raw]
@@ -130,6 +130,7 @@ async def create_room(
 
     pool = build_pool(prizes)
     total_tickets = sum(pool.values())
+    prize_info = build_prize_info(prizes)
 
     pipe = r.pipeline()
 
@@ -163,8 +164,14 @@ async def create_room(
     )
     pipe.hset(_key(code, "members"), host_id, host_member.model_dump_json())
 
+    # Prize info (grade → {name, image})
+    if prize_info:
+        pipe.delete(_key(code, "prize_info"))
+        for grade, info in prize_info.items():
+            pipe.hset(_key(code, "prize_info"), grade, json.dumps(info))
+
     # Expire all keys after 24h
-    for part in ("meta", "pool", "members", "queue", "results"):
+    for part in ("meta", "pool", "members", "queue", "results", "prize_info"):
         pipe.expire(_key(code, part), 86400)
 
     await pipe.execute()
@@ -178,14 +185,13 @@ async def join_room(
     user_id: str,
     user_name: str,
     user_avatar: Optional[str],
-) -> bool:
-    """Add a member to the room. Returns False if room doesn't exist."""
+) -> Optional[MemberInfo]:
+    """Add/reconnect a member. Returns MemberInfo, or None if room doesn't exist."""
     if not await room_exists(code):
-        return False
+        return None
     r = get_redis()
     existing = await r.hget(_key(code, "members"), user_id)
     if existing:
-        # Reconnect: mark as connected
         member = MemberInfo(**json.loads(existing))
         member.connected = True
         await r.hset(_key(code, "members"), user_id, member.model_dump_json())
@@ -199,7 +205,17 @@ async def join_room(
         )
         await r.hset(_key(code, "members"), user_id, member.model_dump_json())
     await r.hset(_key(code, "meta"), "last_activity", _now())
-    return True
+    return member
+
+
+async def get_prize_for_grade(code: str, grade: str) -> tuple[str, Optional[str]]:
+    """Look up the prize name and image for a grade. Falls back to the grade string."""
+    r = get_redis()
+    raw = await r.hget(_key(code, "prize_info"), grade)
+    if raw:
+        info = json.loads(raw)
+        return info.get("name") or grade, info.get("image")
+    return grade, None
 
 
 async def leave_room(code: str, user_id: str) -> None:

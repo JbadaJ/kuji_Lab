@@ -47,7 +47,12 @@ export function clearCache(): void {
 }
 
 export function getValidProducts(): KujiProduct[] {
-  return loadAll().filter(p => !!p.title)
+  const BAD_TITLES = new Set([
+    '一番くじ倶楽部｜BANDAI SPIRITS公式 一番くじ情報サイト',
+    '이치 반 쿠지 클럽 | BANDAI SPIRITS 공식 이치 반 쿠지 정보 사이트',
+    'Ichibankuji Club | BANDAI SPIRITS Official Ichibankuji Information Site',
+  ])
+  return loadAll().filter(p => !!p.title && !BAD_TITLES.has(p.title))
 }
 
 // Returns lightweight summaries sorted newest-first for the home page
