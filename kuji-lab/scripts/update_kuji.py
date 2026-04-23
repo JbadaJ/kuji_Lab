@@ -11,6 +11,10 @@ import json, sys, re, asyncio
 from datetime import datetime, date
 from pathlib import Path
 
+# Windows 콘솔 인코딩 문제 방지
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+
 try:
     from playwright.async_api import async_playwright
     from bs4 import BeautifulSoup

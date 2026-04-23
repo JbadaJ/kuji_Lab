@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-fetch_kujimap.py — kujimap.com에서 등급별 티켓 수를 가져와 kuji_all_products.json에 반영
+fetch_kujimap.py - kujimap.com에서 등급별 티켓 수를 가져와 kuji_all_products.json에 반영
 
 Usage:
   python scripts/fetch_kujimap.py
@@ -13,6 +13,13 @@ import json, re, asyncio, sys, argparse
 from difflib import SequenceMatcher
 from pathlib import Path
 
+# Windows 콘솔 인코딩 문제 방지
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+
+DATA_DIR = Path(__file__).parent.parent / "data"
+GRADE_RE = re.compile(r'^([A-Z]賞|ラストワン賞)')
+
 try:
     from playwright.async_api import async_playwright
     from bs4 import BeautifulSoup
@@ -23,13 +30,37 @@ except ImportError:
     }), flush=True)
     sys.exit(1)
 
-DATA_FILE = Path(__file__).parent.parent / "data" / "kuji_all_products.json"
 KUJIMAP_BASE = "https://kujimap.com"
-GRADE_RE = re.compile(r'^([A-Z]賞|ラストワン賞)')
 
 
 def log(msg_type: str, **kwargs):
     print(json.dumps({"type": msg_type, **kwargs}, ensure_ascii=False), flush=True)
+
+
+def load_all_products() -> list[dict]:
+    """data/ 디렉토리의 kuji_products_*.json 파일을 모두 읽어 병합."""
+    all_products = []
+    for filepath in sorted(DATA_DIR.glob("kuji_products_*.json")):
+        with open(filepath, encoding="utf-8") as f:
+            all_products.extend(json.load(f))
+    return all_products
+
+
+def save_by_year(products: list[dict]) -> None:
+    """상품 목록을 release_date 연도별로 분리하여 저장."""
+    by_year: dict[str, list] = {}
+    for p in products:
+        y = "unknown"
+        if p.get("release_date"):
+            m = re.search(r"(\d{4})年", p["release_date"])
+            if m:
+                y = m.group(1)
+        by_year.setdefault(y, []).append(p)
+
+    for year, year_products in by_year.items():
+        filepath = DATA_DIR / f"kuji_products_{year}.json"
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(year_products, f, ensure_ascii=False, separators=(",", ":"))
 
 
 def title_similarity(a: str, b: str) -> float:
@@ -119,7 +150,7 @@ async def fetch_ticket_counts(page, url: str) -> tuple[dict[str, int], int | Non
             if not gm:
                 continue
             grade = gm.group(1)
-            # 두 번째 컬럼부터 순서대로 확인 — 순수 정수면 티켓 수
+            # 두 번째 컬럼부터 순서대로 확인 - 순수 정수면 티켓 수
             for cell in cells[1:]:
                 t = cell.get_text(strip=True)
                 if re.fullmatch(r'\d+', t) and int(t) > 0:
@@ -153,17 +184,24 @@ async def fetch_ticket_counts(page, url: str) -> tuple[dict[str, int], int | Non
 
 
 def apply_counts_to_product(product: dict, counts: dict[str, int], kujimap_url: str) -> bool:
-    """Prize 목록에 count 필드 설정. 변경 있으면 True 반환."""
+    """Prize 목록에 count 필드 설정. 변경 있으면 True 반환.
+
+    ラストワン賞는 kujimap에 등재되지 않는 경우가 많으므로 count가 없으면 1로 채운다.
+    """
     changed = False
     for prize in product.get("prizes", []):
         grade = prize.get("grade") or ""
         if not grade:
             gm = GRADE_RE.match(prize.get("full_name", ""))
             grade = gm.group(1) if gm else ""
+
         if grade in counts and counts[grade] > 0:
             if prize.get("count") != counts[grade]:
                 prize["count"] = counts[grade]
                 changed = True
+        elif grade == "ラストワン賞" and not prize.get("count"):
+            prize["count"] = 1
+            changed = True
 
     if changed:
         product["kujimap_url"] = kujimap_url
@@ -179,8 +217,7 @@ async def main():
     args = parser.parse_args()
 
     log("progress", message="데이터 로드 중...", percent=0)
-    with open(DATA_FILE, encoding="utf-8") as f:
-        products: list[dict] = json.load(f)
+    products: list[dict] = load_all_products()
 
     # 처리 대상 필터링
     def is_target(p: dict) -> bool:
@@ -260,7 +297,7 @@ async def main():
                 MATCH_THRESHOLD = 0.45
                 if best_match is None or best_score < MATCH_THRESHOLD:
                     log("warning",
-                        message=f"  매칭 실패 (최고 유사도 {best_score:.2f}): {product['slug']} — \"{product['title'][:40]}\"")
+                        message=f"  매칭 실패 (최고 유사도 {best_score:.2f}): {product['slug']} - \"{product['title'][:40]}\"")
                     failed_count += 1
                     continue
 
@@ -288,12 +325,11 @@ async def main():
 
         await browser.close()
 
-    # JSON 저장
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(products, f, ensure_ascii=False, separators=(",", ":"))
+    # 연도별 파일로 저장
+    save_by_year(products)
 
     log("done",
-        message=f"완료 — 업데이트 {updated_count}개, 실패/스킵 {failed_count}개 (총 {len(products)}개)",
+        message=f"완료 - 업데이트 {updated_count}개, 실패/스킵 {failed_count}개 (총 {len(products)}개)",
         updated=updated_count,
         failed=failed_count,
         total=len(products))
