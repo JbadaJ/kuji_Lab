@@ -3,13 +3,14 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import Fuse from 'fuse.js'
 import type { ProductSummary } from '@/types/kuji'
 import { IP_CATEGORIES, IP_LIST, getDisplayName } from '@/lib/aliases'
+import { normalizeSaleType } from '@/lib/utils'
 import { useLanguage } from '@/app/contexts/LanguageContext'
 import { fmt } from '@/lib/i18n'
 import { useTranslate } from '@/app/hooks/useTranslate'
 import { useWishlist } from '@/app/hooks/useWishlist'
+import { useProductFilters } from '@/app/hooks/useProductFilters'
 
 interface Props {
   products: ProductSummary[]
@@ -17,14 +18,6 @@ interface Props {
 }
 
 const PAGE_SIZE = 24
-
-function normalizeSaleType(types: string[]): string[] {
-  return types.map(t => {
-    if (t.includes('店頭') || t.includes('Store') || t.includes('매장') || t.includes('점포')) return '店頭販売'
-    if (t.includes('オンライン') || t.includes('online') || t.includes('온라인')) return 'オンライン販売'
-    return t
-  })
-}
 
 // Maps category ID → translation key in `t`
 const CATEGORY_KEY: Record<string, keyof import('@/lib/i18n').Translations> = {
@@ -251,79 +244,21 @@ export default function ProductGrid({ products, years }: Props) {
   const { t, locale } = useLanguage()
   const { wishlist, toggle: toggleWishlist, has: isWishlisted } = useWishlist()
   const [activeTab, setActiveTab] = useState<'all' | 'wishlist'>('all')
-
-  // 서버/클라이언트 모두 동일한 기본값으로 초기화 → hydration 불일치 방지
-  const [mounted, setMounted] = useState(false)
-  const [query, setQuery] = useState('')
-  const [yearFilter, setYearFilter] = useState('all')
-  const [monthFilter, setMonthFilter] = useState('all')
-  const [saleFilter, setSaleFilter] = useState('all')
-  const [ipFilter, setIpFilter] = useState('')
   const [ipPanelOpen, setIpPanelOpen] = useState(false)
-  const [page, setPage] = useState(1)
-
-  // 마운트 후 URL 파라미터 읽기 (클라이언트 전용)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    setQuery(params.get('q') ?? '')
-    setYearFilter(params.get('year') ?? 'all')
-    setMonthFilter(params.get('month') ?? 'all')
-    setSaleFilter(params.get('type') ?? 'all')
-    setIpFilter(params.get('ip') ?? '')
-    setMounted(true)
-  }, [])
-
-  // 필터 상태 → URL 동기화 (마운트 완료 후에만 실행, URL 덮어쓰기 방지)
-  useEffect(() => {
-    if (!mounted) return
-    const params = new URLSearchParams()
-    if (query) params.set('q', query)
-    if (yearFilter !== 'all') params.set('year', yearFilter)
-    if (monthFilter !== 'all') params.set('month', monthFilter)
-    if (saleFilter !== 'all') params.set('type', saleFilter)
-    if (ipFilter) params.set('ip', ipFilter)
-    const qs = params.toString()
-    window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
-  }, [query, yearFilter, monthFilter, saleFilter, ipFilter, mounted])
   const ipButtonRef = useRef<HTMLDivElement>(null)
 
-  const fuse = useMemo(
-    () => new Fuse(products, { keys: ['searchText'], threshold: 0.35 }),
-    [products]
-  )
+  const {
+    query, setQuery,
+    yearFilter, setYearFilter,
+    monthFilter, setMonthFilter,
+    saleFilter, setSaleFilter,
+    ipFilter, setIpFilter,
+    page, setPage,
+    availableIpIds,
+    availableMonths,
+    filtered,
+  } = useProductFilters(products)
 
-  const availableIpIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const p of products) for (const id of p.ipTags) ids.add(id)
-    return ids
-  }, [products])
-
-  const availableMonths = useMemo(() => {
-    if (yearFilter === 'all') return []
-    return [
-      ...new Set(
-        products
-          .filter(p => p.release_date?.startsWith(yearFilter))
-          .map(p => p.release_date?.slice(5, 7))
-          .filter((m): m is string => !!m)
-      ),
-    ].sort()
-  }, [yearFilter, products])
-
-  const filtered = useMemo(() => {
-    let result = query.trim()
-      ? fuse.search(query.trim()).map(r => r.item)
-      : products
-
-    if (yearFilter !== 'all') result = result.filter(p => p.release_date?.startsWith(yearFilter))
-    if (monthFilter !== 'all') result = result.filter(p => p.release_date?.slice(5, 7) === monthFilter)
-    if (saleFilter !== 'all') result = result.filter(p => normalizeSaleType(p.sale_type).includes(saleFilter))
-    if (ipFilter) result = result.filter(p => p.ipTags.includes(ipFilter))
-
-    return result
-  }, [query, yearFilter, monthFilter, saleFilter, ipFilter, products, fuse])
-
-  // 찜 탭일 때는 위시리스트 상품만 표시, 다른 필터 무시
   const displayProducts = useMemo(
     () => activeTab === 'wishlist' ? products.filter(p => wishlist.includes(p.slug)) : filtered,
     [activeTab, wishlist, filtered, products]
@@ -337,10 +272,6 @@ export default function ProductGrid({ products, years }: Props) {
   // Translate visible card titles (cached — only new items trigger API calls)
   const visibleTitles = useMemo(() => visible.map(p => p.title), [visible])
   const { results: translatedTitles, loading: translatingTitles } = useTranslate(visibleTitles, locale)
-
-  function reset(setter: (v: string) => void, v: string) {
-    setter(v); setPage(1)
-  }
 
   const filterBtn = (active: boolean) =>
     `px-3 py-1 rounded-full text-xs font-medium transition-colors ${
@@ -391,7 +322,7 @@ export default function ProductGrid({ products, years }: Props) {
         <input
           type="text"
           value={query}
-          onChange={e => { setQuery(e.target.value); setPage(1) }}
+          onChange={e => setQuery(e.target.value)}
           placeholder={t.searchPlaceholder}
           className="w-full pl-12 pr-4 py-4 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-base text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400"
         />
@@ -403,7 +334,7 @@ export default function ProductGrid({ products, years }: Props) {
         <div className="flex flex-wrap gap-2 items-center">
           <span className="text-xs text-zinc-500 dark:text-zinc-400 w-12 shrink-0">{t.filterYear}</span>
           {['all', ...years].map(y => (
-            <button key={y} onClick={() => { reset(setYearFilter, y); setMonthFilter('all') }} className={filterBtn(yearFilter === y)}>
+            <button key={y} onClick={() => setYearFilter(y)} className={filterBtn(yearFilter === y)}>
               {y === 'all' ? t.filterAll : y}
             </button>
           ))}
@@ -414,7 +345,7 @@ export default function ProductGrid({ products, years }: Props) {
           <div className="flex flex-wrap gap-2 items-center">
             <span className="text-xs text-zinc-500 dark:text-zinc-400 w-12 shrink-0">{t.filterMonth}</span>
             {['all', ...availableMonths].map(m => (
-              <button key={m} onClick={() => reset(setMonthFilter, m)} className={filterBtn(monthFilter === m)
+              <button key={m} onClick={() => setMonthFilter(m)} className={filterBtn(monthFilter === m)
                 .replace('bg-indigo-600', 'bg-indigo-400').replace('bg-indigo-600', 'bg-indigo-400')}>
                 {m === 'all' ? t.filterAll : `${m}月`}
               </button>
@@ -430,7 +361,7 @@ export default function ProductGrid({ products, years }: Props) {
             { value: '店頭販売', label: t.filterStore },
             { value: 'オンライン販売', label: t.filterOnline },
           ] as const).map(({ value, label }) => (
-            <button key={value} onClick={() => reset(setSaleFilter, value)} className={filterBtn(saleFilter === value)}>
+            <button key={value} onClick={() => setSaleFilter(value)} className={filterBtn(saleFilter === value)}>
               {label}
             </button>
           ))}
@@ -452,7 +383,7 @@ export default function ProductGrid({ products, years }: Props) {
             {ipPanelOpen && (
               <IpSelectorPanel
                 selected={ipFilter}
-                onSelect={id => { setIpFilter(id); setPage(1) }}
+                onSelect={id => setIpFilter(id)}
                 onClose={() => setIpPanelOpen(false)}
                 availableIds={availableIpIds}
               />
@@ -460,7 +391,7 @@ export default function ProductGrid({ products, years }: Props) {
           </div>
           {ipFilter && (
             <button
-              onClick={() => reset(setIpFilter, '')}
+              onClick={() => setIpFilter('')}
               className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 flex items-center gap-0.5"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

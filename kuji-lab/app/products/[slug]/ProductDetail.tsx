@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState, useCallback, useEffect } from 'react'
 import type { KujiProduct, Prize } from '@/types/kuji'
+import { normalizeSaleType, formatReleaseDate, getPrizeGrade, GRADE_COLORS } from '@/lib/utils'
 import { useLanguage } from '@/app/contexts/LanguageContext'
 import { fmt, translateGrade, translateVariants } from '@/lib/i18n'
 import { useTranslate } from '@/app/hooks/useTranslate'
@@ -77,24 +78,6 @@ function Lightbox({ src, alt, onClose }: { src: string; alt: string; onClose: ()
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const GRADE_COLORS: Record<string, string> = {
-  'A賞': 'bg-yellow-400 text-yellow-900',
-  'B賞': 'bg-sky-500 text-white',
-  'C賞': 'bg-emerald-500 text-white',
-  'D賞': 'bg-orange-400 text-white',
-  'E賞': 'bg-pink-500 text-white',
-  'F賞': 'bg-violet-500 text-white',
-  'G賞': 'bg-red-500 text-white',
-  'H賞': 'bg-teal-500 text-white',
-  'I賞': 'bg-indigo-500 text-white',
-  'ラストワン賞': 'bg-gradient-to-r from-yellow-400 to-orange-500 text-white',
-}
-
-function getGrade(prize: Prize): string {
-  if (prize.grade) return prize.grade
-  const match = prize.full_name.match(/^([A-Z]賞|ラストワン賞)/)
-  return match ? match[1] : ''
-}
 
 function GradeBadge({ grade, locale }: { grade: string; locale: string }) {
   const color = GRADE_COLORS[grade] ?? 'bg-zinc-400 text-white'
@@ -105,24 +88,6 @@ function GradeBadge({ grade, locale }: { grade: string; locale: string }) {
   )
 }
 
-function formatReleaseDate(dateStr: string, locale: string): string {
-  const match = dateStr.match(/(\d{4})年(\d{2})月(\d{2})日/)
-  if (!match) return dateStr
-  const [, year, month, day] = match
-  const y = parseInt(year), m = parseInt(month), d = parseInt(day)
-  if (locale === 'ja') return dateStr
-  if (locale === 'ko') return `${y}년 ${m}월 ${d}일`
-  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December']
-  return `${monthNames[m - 1]} ${d}, ${y}`
-}
-
-function normalizeSaleType(types: string[]): string[] {
-  return types.map(t => {
-    if (t.includes('店頭') || t.includes('Store') || t.includes('매장')) return '店頭販売'
-    if (t.includes('オンライン') || t.includes('online') || t.includes('온라인')) return 'オンライン販売'
-    return t
-  })
-}
 
 // ── Prize list with API translation ──────────────────────────────────────────
 
@@ -158,7 +123,7 @@ function PrizeList({ prizes, locale, t, onImageClick }: {
       </h2>
       <div className="flex flex-col gap-2">
         {prizes.map((prize, i) => {
-          const grade = getGrade(prize)
+          const grade = getPrizeGrade(prize)
           const image = prize.images[0]
           const name  = tNames[i] ?? prize.name
           const desc  = tDescs[i] || undefined
@@ -226,7 +191,7 @@ export default function ProductDetail({ product, initialSim }: { product: KujiPr
 
   const validPrizes = useMemo(
     () => product.prizes.filter(p => {
-      const grade = getGrade(p)
+      const grade = getPrizeGrade(p)
       return grade !== '' || p.name !== product.title
     }),
     [product]

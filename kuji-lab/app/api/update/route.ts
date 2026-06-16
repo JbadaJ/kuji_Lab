@@ -1,11 +1,34 @@
 import { spawn } from 'child_process'
 import path from 'path'
+import { cookies } from 'next/headers'
 import { clearCache } from '@/lib/data'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+async function computeToken(id: string, password: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(`${id}:${password}`)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 export async function POST() {
+  const cookieStore = await cookies()
+  const session = cookieStore.get('admin_session')?.value
+  const expected = await computeToken(
+    process.env.ADMIN_ID ?? '',
+    process.env.ADMIN_PASSWORD ?? ''
+  )
+  if (!session || session !== expected) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
   const scriptPath = path.join(process.cwd(), 'scripts', 'update_kuji.py')
   const encoder = new TextEncoder()
 

@@ -35,8 +35,17 @@ function loadAll(): KujiProduct[] {
     .sort()
   const all: KujiProduct[] = []
   for (const file of files) {
-    const products = JSON.parse(readFileSync(join(dataDir, file), 'utf-8')) as KujiProduct[]
-    all.push(...products)
+    try {
+      const raw = readFileSync(join(dataDir, file), 'utf-8')
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) {
+        console.error(`[data] ${file}: expected array, got ${typeof parsed}`)
+        continue
+      }
+      all.push(...(parsed as KujiProduct[]))
+    } catch (err) {
+      console.error(`[data] Failed to load ${file}:`, err)
+    }
   }
   _cache = all
   return _cache
