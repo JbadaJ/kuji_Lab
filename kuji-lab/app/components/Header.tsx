@@ -3,6 +3,7 @@
 import { useLanguage } from '@/app/contexts/LanguageContext'
 import { fmt } from '@/lib/i18n'
 import LanguageSwitcher from './LanguageSwitcher'
+import ThemeToggle from './ThemeToggle'
 import NoticesBell from './NoticesBell'
 import UserButton from './UserButton'
 
@@ -26,6 +27,7 @@ export default function Header({ productCount }: Props) {
         </div>
         <div className="flex items-center gap-1">
           <NoticesBell />
+          <ThemeToggle />
           <LanguageSwitcher />
           <UserButton />
         </div>

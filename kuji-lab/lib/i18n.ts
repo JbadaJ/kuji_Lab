@@ -154,6 +154,11 @@ export interface Translations {
   autoDrawResultGoalMet: string
   autoDrawResultNoMore: string
   autoDrawClose: string
+  // Error pages
+  errorTitle: string
+  errorDescription: string
+  errorRetry: string
+  errorBackHome: string
   // Auth
   authSignIn: string
   authSignOut: string
@@ -296,6 +301,10 @@ export const translations: Record<Locale, Translations> = {
     autoDrawResultGoalMet: '목표 달성!',
     autoDrawResultNoMore: '티켓 소진',
     autoDrawClose: '닫기',
+    errorTitle: '문제가 발생했습니다',
+    errorDescription: '페이지를 불러오는 중 오류가 발생했습니다.',
+    errorRetry: '다시 시도',
+    errorBackHome: '홈으로 돌아가기',
     authSignIn: '로그인',
     authSignOut: '로그아웃',
     authSignInDesc: '소셜 계정으로 간편하게 로그인하세요.',
@@ -434,6 +443,10 @@ export const translations: Record<Locale, Translations> = {
     autoDrawResultGoalMet: '目標達成！',
     autoDrawResultNoMore: 'チケット終了',
     autoDrawClose: '閉じる',
+    errorTitle: '問題が発生しました',
+    errorDescription: 'ページの読み込み中にエラーが発生しました。',
+    errorRetry: 'もう一度試す',
+    errorBackHome: 'ホームに戻る',
     authSignIn: 'ログイン',
     authSignOut: 'ログアウト',
     authSignInDesc: 'ソーシャルアカウントで簡単ログイン。',
@@ -572,6 +585,10 @@ export const translations: Record<Locale, Translations> = {
     autoDrawResultGoalMet: 'Goal reached!',
     autoDrawResultNoMore: 'Tickets exhausted',
     autoDrawClose: 'Close',
+    errorTitle: 'Something went wrong',
+    errorDescription: 'An error occurred while loading the page.',
+    errorRetry: 'Try again',
+    errorBackHome: 'Back to Home',
     authSignIn: 'Sign In',
     authSignOut: 'Sign Out',
     authSignInDesc: 'Sign in with your social account.',

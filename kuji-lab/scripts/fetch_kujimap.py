@@ -7,6 +7,7 @@ Usage:
   python scripts/fetch_kujimap.py --slug doubutsuno_mori6   # 특정 상품만
   python scripts/fetch_kujimap.py --month 202604            # 특정 월만
   python scripts/fetch_kujimap.py --refetch                 # 이미 등록된 상품도 재확인
+  python scripts/fetch_kujimap.py --search-only             # 검색 기반 매칭만 사용 (월별 목록 스킵)
 """
 
 import json, re, asyncio, sys, argparse
@@ -63,13 +64,82 @@ def save_by_year(products: list[dict]) -> None:
             json.dump(year_products, f, ensure_ascii=False, separators=(",", ":"))
 
 
+def clean_title(s: str) -> str:
+    """제목에서 공통 prefix/장식 제거"""
+    s = re.sub(r'^(一番くじ\s*(プレミアム|ONLINE|ONLINEプレミアム|Vプレミアム|MINI)?\s*)', '', s.strip())
+    # 전각→반각 변환
+    s = s.translate(str.maketrans('ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ０１２３４５６７８９',
+                                  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'))
+    s = re.sub(r'\s+', ' ', s)
+    return s.lower()
+
+
 def title_similarity(a: str, b: str) -> float:
     """일반적인 prefix/suffix 제거 후 유사도 비교"""
-    def clean(s: str) -> str:
-        s = re.sub(r'^一番くじ\s*', '', s.strip())
-        s = re.sub(r'\s+', ' ', s)
-        return s.lower()
-    return SequenceMatcher(None, clean(a), clean(b)).ratio()
+    return SequenceMatcher(None, clean_title(a), clean_title(b)).ratio()
+
+
+def extract_search_keyword(title: str) -> str:
+    """제목에서 kujimap 검색에 사용할 키워드 추출.
+
+    '一番くじ ドラゴンボールZ～サイヤ人襲来編～' → 'ドラゴンボールZ'
+    '一番くじ リラックマ～ハートデザイン～' → 'リラックマ'
+    """
+    cleaned = re.sub(r'^(一番くじ\s*(プレミアム|ONLINE|ONLINEプレミアム|Vプレミアム|MINI|ﾁｬﾚﾝｼﾞ)?\s*)', '', title.strip())
+    # シャア専用一番くじ のような特殊 prefix
+    cleaned = re.sub(r'^シャア専用一番くじ\s*', '', cleaned)
+
+    # ～...～ や （...） を除去して作品名だけ残す
+    keyword = re.split(r'[～〜~（(「【\-―─ ]', cleaned)[0].strip()
+
+    # 全角→半角
+    keyword = keyword.translate(str.maketrans('ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ０１２３４５６７８９',
+                                              'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'))
+
+    # 末尾の数字やバージョンを除去 (例: "リラックマ5th" → "リラックマ")
+    keyword = re.sub(r'[\d]+(?:th|st|nd|rd)?$', '', keyword, flags=re.IGNORECASE).strip()
+
+    # 短すぎたら元のcleaned全体を使う
+    if len(keyword) < 2:
+        keyword = cleaned[:20]
+
+    return keyword
+
+
+async def search_kujimap(page, keyword: str) -> list[dict]:
+    """kujimap.com のWordPress検索で商品リストを取得.
+
+    Returns: [{"url": ..., "title": ...}, ...]
+    """
+    from urllib.parse import quote
+    url = f"{KUJIMAP_BASE}/?s={quote(keyword)}"
+    try:
+        await page.goto(url, wait_until="domcontentloaded", timeout=25000)
+        await page.wait_for_timeout(2000)
+        html = await page.content()
+        soup = BeautifulSoup(html, "html.parser")
+
+        results = []
+        seen_hrefs: set[str] = set()
+
+        # 検索結果から一番くじ商品のリンクを取得
+        for a in soup.find_all("a", href=re.compile(r"/1bankuji/1bankuji_\d{6}/1bankuji_\w+")):
+            href: str = a.get("href", "")
+            if not href or href in seen_hrefs:
+                continue
+            seen_hrefs.add(href)
+
+            raw_title = a.get_text(separator=" ", strip=True)
+            if not raw_title:
+                continue
+
+            full_url = KUJIMAP_BASE + href if href.startswith("/") else href
+            results.append({"url": full_url, "title": raw_title})
+
+        return results
+    except Exception as e:
+        log("warning", message=f"검색 오류 ({keyword}): {e}")
+        return []
 
 
 def release_yyyymm(product: dict) -> str | None:
@@ -209,11 +279,84 @@ def apply_counts_to_product(product: dict, counts: dict[str, int], kujimap_url: 
     return changed
 
 
+async def try_match_product(page, product: dict, candidate_list: list[dict]) -> tuple[dict | None, float]:
+    """candidate_list에서 제목 유사도가 가장 높은 상품을 반환."""
+    best_match: dict | None = None
+    best_score = 0.0
+    for kp in candidate_list:
+        score = title_similarity(product["title"], kp["title"])
+        if score > best_score:
+            best_score = score
+            best_match = kp
+    return best_match, best_score
+
+
+async def try_search_match(page, product: dict) -> tuple[dict | None, float]:
+    """제목에서 키워드를 추출하여 kujimap 검색 후 가장 유사한 결과를 반환."""
+    keyword = extract_search_keyword(product["title"])
+    if len(keyword) < 2:
+        return None, 0.0
+
+    search_results = await search_kujimap(page, keyword)
+    if not search_results:
+        return None, 0.0
+
+    return await try_match_product(page, product, search_results)
+
+
+async def process_product(page, product: dict, candidate_list: list[dict] | None, search_only: bool) -> str:
+    """단일 상품 처리. 반환값: 'updated', 'no_counts', 'no_match'"""
+    MATCH_THRESHOLD = 0.45
+    best_match: dict | None = None
+    best_score = 0.0
+
+    # 1단계: 월별 목록에서 매칭 (search_only가 아닌 경우)
+    if not search_only and candidate_list:
+        best_match, best_score = await try_match_product(page, product, candidate_list)
+
+    # 2단계: 월별 매칭 실패 시 검색으로 폴백
+    if best_match is None or best_score < MATCH_THRESHOLD:
+        search_match, search_score = await try_search_match(page, product)
+        if search_match and search_score > best_score:
+            best_match = search_match
+            best_score = search_score
+            if best_score >= MATCH_THRESHOLD:
+                log("progress",
+                    message=f"  검색 매칭 ({best_score:.2f}) {product['slug']} ↔ \"{best_match['title'][:35]}\"")
+
+    if best_match is None or best_score < MATCH_THRESHOLD:
+        log("warning",
+            message=f"  매칭 실패 ({best_score:.2f}): {product['slug']} - \"{product['title'][:40]}\"")
+        return "no_match"
+
+    if best_score >= MATCH_THRESHOLD and not search_only:
+        log("progress",
+            message=f"  매칭 ({best_score:.2f}) {product['slug']} ↔ \"{best_match['title'][:35]}\"")
+
+    counts, total = await fetch_ticket_counts(page, best_match["url"])
+
+    if not counts:
+        log("warning", message=f"  티켓 수 없음: {product['slug']}")
+        await page.wait_for_timeout(600)
+        return "no_counts"
+
+    total_str = f" (총 {total}장)" if total else ""
+    log("progress", message=f"  ✓ {product['slug']}{total_str}: {counts}")
+
+    if apply_counts_to_product(product, counts, best_match["url"]):
+        await page.wait_for_timeout(800)
+        return "updated"
+
+    await page.wait_for_timeout(800)
+    return "no_change"
+
+
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--slug",    help="특정 상품 slug만 처리")
     parser.add_argument("--month",   help="특정 월만 처리 (YYYYMM)")
     parser.add_argument("--refetch", action="store_true", help="이미 count 있는 상품도 재확인")
+    parser.add_argument("--search-only", action="store_true", help="검색 기반 매칭만 사용 (월별 목록 스킵)")
     args = parser.parse_args()
 
     log("progress", message="데이터 로드 중...", percent=0)
@@ -270,62 +413,42 @@ async def main():
         total_months = len(months)
         for mi, yyyymm in enumerate(months):
             base_pct = 5 + int(88 * mi / total_months)
-            log("progress",
-                message=f"[{mi+1}/{total_months}] {yyyymm[:4]}년 {int(yyyymm[4:])}월 kujimap 목록 조회...",
-                percent=base_pct)
 
-            kujimap_list = await fetch_month_listing(page, yyyymm)
-            if not kujimap_list:
-                log("warning", message=f"  kujimap {yyyymm} 목록 없음 (접근 불가 or 해당 월 데이터 없음)")
-                failed_count += len(by_month[yyyymm])
-                continue
+            kujimap_list: list[dict] = []
+            if not args.search_only:
+                log("progress",
+                    message=f"[{mi+1}/{total_months}] {yyyymm[:4]}년 {int(yyyymm[4:])}월 kujimap 목록 조회...",
+                    percent=base_pct)
 
-            log("progress",
-                message=f"  kujimap {yyyymm}: {len(kujimap_list)}개 상품 발견",
-                percent=base_pct + 1)
+                kujimap_list = await fetch_month_listing(page, yyyymm)
+                if kujimap_list:
+                    log("progress",
+                        message=f"  kujimap {yyyymm}: {len(kujimap_list)}개 상품 발견",
+                        percent=base_pct + 1)
+            else:
+                log("progress",
+                    message=f"[{mi+1}/{total_months}] {yyyymm[:4]}년 {int(yyyymm[4:])}월 검색 매칭...",
+                    percent=base_pct)
 
+            month_updated = 0
             for product in by_month[yyyymm]:
-                # 제목 유사도 매칭
-                best_match: dict | None = None
-                best_score = 0.0
-                for kp in kujimap_list:
-                    score = title_similarity(product["title"], kp["title"])
-                    if score > best_score:
-                        best_score = score
-                        best_match = kp
-
-                MATCH_THRESHOLD = 0.45
-                if best_match is None or best_score < MATCH_THRESHOLD:
-                    log("warning",
-                        message=f"  매칭 실패 (최고 유사도 {best_score:.2f}): {product['slug']} - \"{product['title'][:40]}\"")
-                    failed_count += 1
-                    continue
-
-                log("progress",
-                    message=f"  매칭 ({best_score:.2f}) {product['slug']} ↔ \"{best_match['title'][:35]}\"",
-                    percent=base_pct + 2)
-
-                counts, total = await fetch_ticket_counts(page, best_match["url"])
-
-                if not counts:
-                    log("warning", message=f"  티켓 수 없음: {product['slug']}")
-                    failed_count += 1
-                    await page.wait_for_timeout(600)
-                    continue
-
-                total_str = f" (총 {total}장)" if total else ""
-                log("progress",
-                    message=f"  ✓ {product['slug']}{total_str}: {counts}",
-                    percent=base_pct + 3)
-
-                if apply_counts_to_product(product, counts, best_match["url"]):
+                result = await process_product(page, product, kujimap_list, args.search_only)
+                if result == "updated":
                     updated_count += 1
+                    month_updated += 1
+                elif result in ("no_match", "no_counts"):
+                    failed_count += 1
 
-                await page.wait_for_timeout(800)
+            # 매 월 처리 후 중간 저장 (중단해도 진행분 유지)
+            if month_updated > 0:
+                save_by_year(products)
+                log("progress",
+                    message=f"  💾 {yyyymm} 저장 완료 (이번 달 +{month_updated}, 누적 {updated_count})",
+                    percent=base_pct + 4)
 
         await browser.close()
 
-    # 연도별 파일로 저장
+    # 최종 저장
     save_by_year(products)
 
     log("done",
