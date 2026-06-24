@@ -1,36 +1,85 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Kuji Lab
+
+Japanese Ichiban Kuji (lottery) product browser and draw simulator.
+
+Browse 2,500+ kuji products from [1kuji.com](https://1kuji.com), search by IP/character, and simulate draws with realistic probability.
+
+## Features
+
+### Phase 1 - Search & Browse (Complete)
+- Fuzzy search with fuse.js across 2,500+ products
+- Filters: year, month, sale type, IP/character category
+- Wishlist with localStorage persistence
+- Responsive grid with pagination
+- Dark mode & i18n (ko/ja/en)
+
+### Phase 2 - Solo Draw Simulator (Complete)
+- Weighted random sampling from ticket pool
+- Three draw modes: default, random, custom preset
+- Auto-draw with configurable speed and goal
+- Animated reveal with effects and sound
+- Probability calculator per grade
+- Shareable URL with encoded settings
+- Draw history tracking (localStorage)
+
+### Phase 3 - Room Mode (In Progress)
+- FastAPI + WebSocket backend (`kuji-server/`)
+- Redis for shared room state
+- Room creation and code-based join
+- Turn-based multiplayer draw (WIP)
+
+## Tech Stack
+
+| Layer | Stack |
+|-------|-------|
+| Frontend | Next.js 16, React 19, Tailwind CSS v4 |
+| Search | fuse.js |
+| Auth | NextAuth v5 (Google, GitHub, Discord) |
+| Backend | FastAPI, WebSocket, Redis |
+| Data | Scraped from 1kuji.com via Playwright + BeautifulSoup |
+| Deploy | Vercel (frontend), Railway (backend) |
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+cd kuji-lab
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Backend (for Room Mode)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cd kuji-server
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
 
-## Learn More
+Requires Redis running locally or `REDIS_URL` in `.env`.
 
-To learn more about Next.js, take a look at the following resources:
+## Data
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `data/kuji_products_YYYY.json` - Products split by release year
+- ~2,556 products total (2008-2026)
+- Updated via admin panel (`/admin`) or `scripts/update_kuji.py`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project Structure
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+kuji-lab/
+  app/
+    page.tsx              # Home (search + product grid)
+    products/[slug]/      # Product detail + simulator
+    room/                 # Multiplayer room lobby
+    admin/                # Admin panel
+    api/                  # API routes (update, auth, room, notices)
+  components/             # Shared UI components
+  lib/                    # Data loading, i18n, aliases
+  simulator/              # Draw simulator logic & UI
+  data/                   # Product JSON files
+  scripts/                # Scraper scripts
+  types/                  # TypeScript definitions
+kuji-server/              # FastAPI backend for Room Mode
+```

@@ -1,6 +1,7 @@
 import { spawn } from 'child_process'
 import path from 'path'
 import { cookies } from 'next/headers'
+import { revalidatePath } from 'next/cache'
 import { clearCache } from '@/lib/data'
 
 export const runtime = 'nodejs'
@@ -74,6 +75,7 @@ export async function POST() {
           send({ type: 'error', message: `프로세스 비정상 종료 (코드: ${code})` })
         } else {
           clearCache()
+          revalidatePath('/', 'layout')
         }
         try { controller.close() } catch { /* ignore */ }
       })

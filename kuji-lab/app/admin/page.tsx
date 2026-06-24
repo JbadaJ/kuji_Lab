@@ -79,7 +79,7 @@ export default function AdminPage() {
 
   function appendLog(entry: LogEntry) {
     setLogs(prev => [...prev, entry])
-    setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+    setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
   }
 
   async function startUpdate() {

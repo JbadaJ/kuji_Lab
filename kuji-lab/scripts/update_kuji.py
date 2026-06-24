@@ -28,6 +28,16 @@ except ImportError:
 DATA_DIR = Path(__file__).parent.parent / "data"
 BASE_URL = "https://1kuji.com"
 
+BAD_TITLES = {
+    "一番くじ倶楽部｜BANDAI SPIRITS公式 一番くじ情報サイト",
+    "이치 반 쿠지 클럽 | BANDAI SPIRITS 공식 이치 반 쿠지 정보 사이트",
+    "Ichibankuji Club | BANDAI SPIRITS Official Ichibankuji Information Site",
+}
+
+
+def is_bad_title(title: str) -> bool:
+    return not title or title in BAD_TITLES
+
 
 def load_all_products() -> list:
     """data/ 디렉토리의 kuji_products_*.json 파일을 모두 읽어 병합."""
@@ -132,24 +142,39 @@ async def scrape_product_detail(page, slug: str, fallback_title: str = "") -> di
             "prize_count": 0,
         }
 
-        # 타이틀 — h1 → og:title → <title> 순으로 시도
-        h1 = soup.find("h1")
-        if h1:
-            product["title"] = h1.get_text(strip=True)
+        # 타이틀 추출 함수
+        def extract_title(s: BeautifulSoup) -> str:
+            # h1 → og:title → <title> 순으로 시도
+            h1 = s.find("h1")
+            if h1:
+                t = h1.get_text(strip=True)
+                if not is_bad_title(t):
+                    return t
 
-        if not product["title"]:
-            og = soup.find("meta", property="og:title")
+            og = s.find("meta", property="og:title")
             if og:
-                product["title"] = og.get("content", "").strip()
+                t = og.get("content", "").strip()
+                if not is_bad_title(t):
+                    return t
 
-        if not product["title"]:
-            title_tag = soup.find("title")
+            title_tag = s.find("title")
             if title_tag:
                 raw = title_tag.get_text(strip=True)
-                # 사이트명 suffix 제거 (예: "상품명 | 一番くじ")
-                product["title"] = raw.split("|")[0].split("｜")[0].strip()
+                t = raw.split("|")[0].split("｜")[0].strip()
+                if not is_bad_title(t):
+                    return t
+            return ""
 
-        if not product["title"] and fallback_title:
+        product["title"] = extract_title(soup)
+
+        # BAD_TITLE인 경우 JS 렌더링 대기 후 재시도
+        if not product["title"]:
+            await page.wait_for_timeout(5000)
+            html = await page.content()
+            soup = BeautifulSoup(html, "html.parser")
+            product["title"] = extract_title(soup)
+
+        if not product["title"] and fallback_title and not is_bad_title(fallback_title):
             product["title"] = fallback_title
             log("warning", message=f"  제목 미감지, 기존 제목 유지: {slug}")
 
@@ -252,6 +277,8 @@ async def scrape_product_detail(page, slug: str, fallback_title: str = "") -> di
             product["prizes"] = deduped
             product["prize_count"] = len(deduped)
 
+        if is_bad_title(product["title"]):
+            return None
         return product if product["title"] else None
 
     except Exception as e:
@@ -270,22 +297,44 @@ async def main():
 
     existing_by_slug: dict = {p["slug"]: p for p in existing}
 
-    # prize_count == 0 인 상품: 발매 전 스크랩으로 경품 정보가 없는 상품 → 항상 재확인
-    zero_prize_slugs: list = [
+    # 재확인 대상: prize_count == 0 또는 BAD_TITLE인 상품
+    recheck_slugs: list = [
         p["slug"] for p in existing
-        if p.get("prize_count", 0) == 0 and p.get("title")
+        if (p.get("prize_count", 0) == 0 and p.get("title"))
+        or is_bad_title(p.get("title", ""))
     ]
     log("progress",
-        message=f"기존 상품 {len(existing)}개 로드 완료 (경품 미등록 {len(zero_prize_slugs)}개 재확인 대상)",
+        message=f"기존 상품 {len(existing)}개 로드 완료 (재확인 대상 {len(recheck_slugs)}개: 경품 미등록 또는 제목 오류)",
         percent=5)
 
     months = get_months_to_scrape()
     months_str = ", ".join(f"{y}년 {m}월" for y, m in months)
     log("progress", message=f"월별 스크랩 대상: {months_str}", percent=8)
 
-    updated_products: list = []  # 기존에 있던 상품 (정보 갱신)
-    new_products: list = []      # 신규 상품
+    updated_count = 0
+    new_count_total = 0
     scraped_slugs: set = set()   # 이번 실행에서 이미 처리한 slug (중복 방지)
+    save_pending = 0             # 저장 대기 중인 변경 수
+
+    SAVE_INTERVAL = 20  # N개 스크랩마다 중간 저장
+
+    def do_save():
+        """현재 existing 상태를 연도별 파일로 저장."""
+        save_by_year(list(existing_by_slug.values()))
+
+    def apply_product(product: dict, is_new: bool):
+        """스크랩 결과를 existing_by_slug에 즉시 반영."""
+        nonlocal updated_count, new_count_total, save_pending
+        existing_by_slug[product["slug"]] = product
+        if is_new:
+            new_count_total += 1
+        else:
+            updated_count += 1
+        save_pending += 1
+        if save_pending >= SAVE_INTERVAL:
+            do_save()
+            log("progress", message=f"  💾 중간 저장 완료 (신규 {new_count_total}, 업데이트 {updated_count})")
+            save_pending = 0
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
@@ -300,10 +349,10 @@ async def main():
             slugs = await scrape_product_list(page, year, month)
             slugs_to_scrape = [s for s in slugs if s not in scraped_slugs]
 
-            existing_count = sum(1 for s in slugs_to_scrape if s in existing_by_slug)
-            new_count = len(slugs_to_scrape) - existing_count
+            existing_cnt = sum(1 for s in slugs_to_scrape if s in existing_by_slug)
+            new_cnt = len(slugs_to_scrape) - existing_cnt
             log("progress",
-                message=f"  → {len(slugs)}개 발견 (신규 {new_count}개, 업데이트 확인 {existing_count}개)",
+                message=f"  → {len(slugs)}개 발견 (신규 {new_cnt}개, 업데이트 확인 {existing_cnt}개)",
                 percent=base_pct + 3)
 
             for j, slug in enumerate(slugs_to_scrape):
@@ -313,50 +362,43 @@ async def main():
                 pct = base_pct + 3 + int(60 * (j + 1) / max(len(slugs_to_scrape), 1) * (1 / total))
                 log("progress", message=f"  스크랩: {slug} {label}", percent=min(pct, base_pct + 30))
 
-                fallback = existing_by_slug[slug]["title"] if is_existing else ""
+                fallback = existing_by_slug[slug].get("title", "") if is_existing else ""
                 product = await scrape_product_detail(page, slug, fallback_title=fallback)
                 if product:
-                    if is_existing:
-                        updated_products.append(product)
-                    else:
-                        new_products.append(product)
+                    apply_product(product, is_new=not is_existing)
 
                 await page.wait_for_timeout(600)
 
-        # ── prize_count == 0 상품 재확인 (월별 목록에서 누락된 것 포함) ──────────
-        remaining_zero = [s for s in zero_prize_slugs if s not in scraped_slugs]
-        if remaining_zero:
+        # ── 재확인 대상 (prize_count==0 또는 BAD_TITLE) ──────────
+        remaining_recheck = [s for s in recheck_slugs if s not in scraped_slugs]
+        if remaining_recheck:
             log("progress",
-                message=f"경품 미등록 상품 {len(remaining_zero)}개 추가 재확인 중...",
+                message=f"재확인 대상 {len(remaining_recheck)}개 추가 스크랩 중...",
                 percent=82)
-            for j, slug in enumerate(remaining_zero):
+            for j, slug in enumerate(remaining_recheck):
                 scraped_slugs.add(slug)
-                pct = 82 + int(13 * (j + 1) / len(remaining_zero))
+                pct = 82 + int(13 * (j + 1) / len(remaining_recheck))
                 log("progress", message=f"  재확인: {slug}", percent=pct)
 
-                fallback = existing_by_slug[slug]["title"]
+                fallback = existing_by_slug[slug].get("title", "")
                 product = await scrape_product_detail(page, slug, fallback_title=fallback)
                 if product:
-                    updated_products.append(product)
+                    apply_product(product, is_new=False)
 
                 await page.wait_for_timeout(600)
 
         await browser.close()
 
-    if updated_products or new_products:
-        # 기존 데이터에서 업데이트된 slug 제거 후 새 데이터로 교체
-        updated_slugs = {p["slug"] for p in updated_products}
-        merged = [p for p in existing if p["slug"] not in updated_slugs]
-        merged.extend(updated_products)
-        merged.extend(new_products)
-        save_by_year(merged)
+    total_products = len(existing_by_slug)
+    if updated_count or new_count_total:
+        do_save()
         log("done",
-            message=f"✓ 신규 {len(new_products)}개 추가, 기존 {len(updated_products)}개 업데이트 (총 {len(merged)}개)",
-            added=len(new_products),
-            updated=len(updated_products),
-            total=len(merged))
+            message=f"✓ 신규 {new_count_total}개 추가, 기존 {updated_count}개 업데이트 (총 {total_products}개)",
+            added=new_count_total,
+            updated=updated_count,
+            total=total_products)
     else:
-        log("done", message="변경사항이 없습니다.", added=0, updated=0, total=len(existing))
+        log("done", message="변경사항이 없습니다.", added=0, updated=0, total=total_products)
 
 
 if __name__ == "__main__":
