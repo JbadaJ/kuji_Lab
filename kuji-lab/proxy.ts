@@ -11,7 +11,7 @@ async function computeToken(id: string, password: string): Promise<string> {
     .join('')
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // 로그인 페이지와 로그인 API는 통과
