@@ -90,6 +90,8 @@ export function getValidProducts(): KujiProduct[] {
     '一番くじ倶楽部｜BANDAI SPIRITS公式 一番くじ情報サイト',
     '이치 반 쿠지 클럽 | BANDAI SPIRITS 공식 이치 반 쿠지 정보 사이트',
     'Ichibankuji Club | BANDAI SPIRITS Official Ichibankuji Information Site',
+    // 출시 전 스크랩된 一番くじONLINE 플레이스홀더 — 재스크랩 전까지 숨김
+    '一番くじONLINE',
   ])
   return loadAll().filter(p => !!p.title && !BAD_TITLES.has(p.title))
 }

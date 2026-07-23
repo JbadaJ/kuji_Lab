@@ -32,6 +32,8 @@ BAD_TITLES = {
     "一番くじ倶楽部｜BANDAI SPIRITS公式 一番くじ情報サイト",
     "이치 반 쿠지 클럽 | BANDAI SPIRITS 공식 이치 반 쿠지 정보 사이트",
     "Ichibankuji Club | BANDAI SPIRITS Official Ichibankuji Information Site",
+    # 출시 전 一番くじONLINE 플레이스홀더 페이지의 h1 — 실제 제목은 <title>에 있음
+    "一番くじONLINE",
 }
 
 
