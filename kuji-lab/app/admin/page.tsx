@@ -155,7 +155,7 @@ export default function AdminPage() {
           <div>
             <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">데이터 업데이트</h1>
             <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-              1kuji.com 에서 신규 상품을 스크랩하여 kuji_all_products.json 에 추가합니다.
+              1kuji.com 에서 신규 상품을 스크랩하여 연도별 데이터 파일(kuji_products_*.json)에 추가합니다.
             </p>
           </div>
           <button

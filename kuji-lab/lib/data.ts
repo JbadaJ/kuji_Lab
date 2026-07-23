@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'fs'
+import { readFileSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
 import type { KujiProduct, Prize, ProductSummary } from '@/types/kuji'
 import { getAliases, getIpTags } from './aliases'
@@ -25,14 +25,44 @@ function cleanPrizeImages(prizes: Prize[]): Prize[] {
   }))
 }
 
-let _cache: KujiProduct[] | null = null
+// 캐시는 반드시 globalThis에 저장한다. Turbopack이 이 모듈을 라우트(청크)마다
+// 별도 사본으로 번들하므로, 모듈 변수로 두면 /api/update의 clearCache()가
+// 페이지들이 쓰는 캐시 인스턴스를 비우지 못한다. 파일 stamp(mtime+size)를 함께
+// 저장해 외부 스크립트가 데이터를 갱신한 경우에도 자동으로 다시 읽는다.
+interface DataCache {
+  products: KujiProduct[]
+  stamp: string
+}
 
-function loadAll(): KujiProduct[] {
-  if (_cache) return _cache
-  const dataDir = join(process.cwd(), 'data')
-  const files = readdirSync(dataDir)
+const globalCache = globalThis as unknown as { __kujiDataCache?: DataCache | null }
+
+function listDataFiles(dataDir: string): string[] {
+  return readdirSync(dataDir)
     .filter(f => /^kuji_products_\w+\.json$/.test(f))
     .sort()
+}
+
+function computeStamp(dataDir: string, files: string[]): string {
+  return files
+    .map(f => {
+      try {
+        const s = statSync(join(dataDir, f))
+        return `${f}:${s.mtimeMs}:${s.size}`
+      } catch {
+        return `${f}:missing`
+      }
+    })
+    .join('|')
+}
+
+function loadAll(): KujiProduct[] {
+  const dataDir = join(process.cwd(), 'data')
+  const files = listDataFiles(dataDir)
+  const stamp = computeStamp(dataDir, files)
+
+  const cached = globalCache.__kujiDataCache
+  if (cached && cached.stamp === stamp) return cached.products
+
   const all: KujiProduct[] = []
   for (const file of files) {
     try {
@@ -47,12 +77,12 @@ function loadAll(): KujiProduct[] {
       console.error(`[data] Failed to load ${file}:`, err)
     }
   }
-  _cache = all
-  return _cache
+  globalCache.__kujiDataCache = { products: all, stamp }
+  return all
 }
 
 export function clearCache(): void {
-  _cache = null
+  globalCache.__kujiDataCache = null
 }
 
 export function getValidProducts(): KujiProduct[] {
