@@ -130,7 +130,16 @@ async def scrape_product_detail(page, slug: str, fallback_title: str = "") -> di
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=30000)
         await page.wait_for_timeout(2000)
-        html = await page.content()
+
+        # 一番くじONLINE 전용 상품은 JS가 on-line.1kuji.com으로 리다이렉트해 버려서
+        # 렌더링된 DOM에는 서비스 홈("一番くじONLINE")만 남는다. 이 경우 JS를 실행하지
+        # 않는 정적 HTML을 다시 받아 파싱한다 — 실제 제목/배너가 거기에 있다.
+        if f"/products/{slug}" not in page.url:
+            log("progress", message=f"  ↪ 리다이렉트 감지({page.url[:40]}...) — 정적 HTML로 파싱: {slug}")
+            resp = await page.context.request.get(url, timeout=30000)
+            html = await resp.text()
+        else:
+            html = await page.content()
         soup = BeautifulSoup(html, "html.parser")
 
         product: dict = {
