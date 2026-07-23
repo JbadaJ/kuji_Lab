@@ -11,7 +11,19 @@ kuji_Lab/
 └── missing_counts.csv  # analysis of products missing per-grade ticket counts
 ```
 
-All three planned phases are **implemented**: search/browse, solo simulator, and room mode. See "Feature Map" below.
+All three planned phases are **implemented**: search/browse, solo simulator, and room mode.
+
+## Project Status (updated 2026-07-23)
+
+**Deployed**: frontend live at **https://kuji-lab.vercel.app** (Vercel, root dir `kuji-lab`, auto-deploys on push). Room server NOT yet deployed (Railway pending — room mode inactive in production). OAuth provider apps NOT yet registered for the production domain (social login fails in production until redirect URIs + env vars are set; see DEPLOYMENT.md).
+
+**Data** (2,571 products): per-grade ticket counts complete for 1,170, partial for ~754. Older products (2008–2021) cannot be filled — kujimap.com itself lacks the data; the simulator falls back to an estimated pool and labels odds as estimates. Weekly GitHub Actions (`update-data.yml`) scrapes new products + counts for current/next month and commits (production data updates happen ONLY this way — the admin update button cannot work on Vercel serverless).
+
+**Known quirks**:
+- 一番くじONLINE-exclusive product pages JS-redirect to on-line.1kuji.com; the scraper detects this and parses the static (no-JS) HTML instead. Such products have real title/banner but often `prize_count: 0` (prizes unpublished) → simulator disabled by design.
+- 2 dead products (`godzilla_gold`, `godzilla_gold-2`) have placeholder titles and are hidden by the `BAD_TITLES` filter in `lib/data.ts`.
+
+**Recent feature work**: tiered draw effects (grade × rarity × hidden-gem figure detection, `simulator/effects.ts`) and a synthesized sound engine (shared AudioContext, reverb, drag riser, volume/mute persisted to localStorage, `simulator/sound.ts`).
 
 ## Commands
 
@@ -81,7 +93,7 @@ Key areas:
 
 ### `kuji-lab/data/kuji_products_<year>.json` (2008–2026 + `unknown`)
 
-Product data is split **per release year** (there is no single `kuji_all_products.json` anymore). ~2,550 products total. All files are merged at load time by `lib/data.ts`. Scrapers write back with the same per-year split (`save_by_year` in `scripts/fetch_kujimap.py`).
+Product data is split **per release year** (there is no single `kuji_all_products.json` anymore). ~2,570 products total. All files are merged at load time by `lib/data.ts`. Scrapers write back with the same per-year split (`save_by_year` in `scripts/fetch_kujimap.py`).
 
 `data/notices.json` — site notices shown by `NoticesBell`, managed from the admin panel.
 
@@ -103,7 +115,7 @@ Product data is split **per release year** (there is no single `kuji_all_product
 - ~2% have Korean-translated titles (wovn.io auto-translation) → valid but may look odd
 - Some old products have `prize_count: 0` → show product but disable simulator
 - `grade` may be `""` → fall back to parsing `full_name` via `getPrizeGrade` in `lib/utils.ts` (regex `/^([A-Z]賞|ラストワン賞)/`)
-- Per-grade `count` coverage is **partial** (~40% complete as of 2026-07); `missing_counts.csv` lists gaps; run `fetch_kujimap.py --search-only` to fill more (saves incrementally per month, safe to interrupt)
+- Per-grade `count` coverage is **partial** (1,170/2,571 complete as of 2026-07-23); a full 185-month kujimap run was already done — remaining gaps are mostly 2008–2021 products missing on kujimap.com itself and cannot be scraped. `fetch_kujimap.py --search-only` skips already-complete products and saves incrementally, so re-running is safe
 
 ## Data Sources
 
