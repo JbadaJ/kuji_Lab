@@ -1,0 +1,57 @@
+name: Update kuji data
+
+# Scrapes new products from 1kuji.com and fills per-grade ticket counts from
+# kujimap.com, then commits the updated data files. Vercel redeploys
+# automatically on push, so this replaces the admin-panel update button in
+# production (Vercel serverless cannot spawn the Python scraper).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 18 * * 2'   # every Tuesday 18:00 UTC (Wed 03:00 JST)
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: kuji-lab/scripts/requirements.txt
+
+      - name: Install scraper dependencies
+        working-directory: kuji-lab
+        run: |
+          pip install -r scripts/requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Scrape new products (1kuji.com)
+        working-directory: kuji-lab
+        run: python -X utf8 scripts/update_kuji.py
+
+      - name: Fill ticket counts for current and next month (kujimap.com)
+        working-directory: kuji-lab
+        run: |
+          THIS_MONTH=$(date -u +%Y%m)
+          NEXT_MONTH=$(date -u -d "$(date -u +%Y-%m-15) +1 month" +%Y%m)
+          python -X utf8 scripts/fetch_kujimap.py --search-only --month "$THIS_MONTH"
+          python -X utf8 scripts/fetch_kujimap.py --search-only --month "$NEXT_MONTH"
+
+      - name: Commit updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add kuji-lab/data
+          if git diff --cached --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "data: automated weekly scrape ($(date -u +%Y-%m-%d))"
+            git push
+          fi

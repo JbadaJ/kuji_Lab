@@ -14,7 +14,7 @@
 kuji_Lab/
 ├── kuji-lab/          # Next.js 프론트엔드
 │   ├── app/           # App Router 페이지 및 컴포넌트
-│   ├── data/          # kuji_all_products.json (상품 데이터)
+│   ├── data/          # kuji_products_<연도>.json (연도별 상품 데이터)
 │   ├── scripts/       # 데이터 스크래핑 스크립트
 │   └── types/         # TypeScript 타입 정의
 └── kuji-server/       # FastAPI 룸 서버
@@ -111,7 +111,8 @@ ALLOWED_ORIGINS=http://localhost:3000
 ## 3. 데이터 스크래퍼 (scripts)
 
 어드민 패널에서 "업데이트 시작" 버튼을 누르면 실행되는 스크립트입니다.  
-1kuji.com에서 신규 상품을 스크랩하여 `data/kuji_all_products.json`에 추가합니다.
+1kuji.com에서 신규 상품을 스크랩하여 `data/kuji_products_<연도>.json`에 추가합니다.
+등급별 티켓 수는 `scripts/fetch_kujimap.py --search-only`로 kujimap.com에서 보충합니다.
 
 ### 요구사항
 
@@ -131,6 +132,8 @@ python scripts/update_kuji.py
 ---
 
 ## 배포
+
+상세 절차는 [DEPLOYMENT.md](DEPLOYMENT.md)를 참고하세요.
 
 | 서비스 | 플랫폼 |
 |--------|--------|

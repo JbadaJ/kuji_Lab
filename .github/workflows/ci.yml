@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kuji-lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: kuji-lab/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+        env:
+          # dummy values so Auth.js/admin routes can initialize at build time
+          AUTH_SECRET: ci-dummy-secret
+          ADMIN_ID: ci
+          ADMIN_PASSWORD: ci
+          NEXT_PUBLIC_ROOM_SERVER_URL: http://localhost:8000
+          ROOM_TOKEN_SECRET: ci-dummy-secret
+
+  room-server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kuji-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: kuji-server/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest tests/ -q
