@@ -64,3 +64,24 @@ describe('getGradeLetter', () => {
     expect(getGradeLetter('特賞')).toBe('?')
   })
 })
+
+describe('cleanProductTitle', () => {
+  it('strips site-name segments in any position', async () => {
+    const { cleanProductTitle } = await import('@/lib/data')
+    expect(cleanProductTitle('一番くじ 夏目友人帳｜一番くじ倶楽部｜BANDAI SPIRITS公式 一番くじ情報サイト')).toBe('一番くじ 夏目友人帳')
+    expect(cleanProductTitle('一番くじ倶楽部 | 星のカービィ KIRBY HAT STUDIO')).toBe('星のカービィ KIRBY HAT STUDIO')
+    expect(cleanProductTitle('Ichibankuji Club | Ichibankuji ONE PIECE')).toBe('Ichibankuji ONE PIECE')
+  })
+
+  it('returns empty for site-name-only or special-page titles', async () => {
+    const { cleanProductTitle } = await import('@/lib/data')
+    expect(cleanProductTitle('一番くじ倶楽部')).toBe('')
+    expect(cleanProductTitle('sugar pochette（シュガーポシェット）特設ページ | 一番くじ倶楽部')).toBe('')
+  })
+
+  it('keeps normal titles unchanged', async () => {
+    const { cleanProductTitle } = await import('@/lib/data')
+    expect(cleanProductTitle('一番くじ どうぶつの森')).toBe('一番くじ どうぶつの森')
+    expect(cleanProductTitle('一番くじONLINE')).toBe('一番くじONLINE')
+  })
+})

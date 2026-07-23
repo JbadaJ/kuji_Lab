@@ -34,7 +34,25 @@ BAD_TITLES = {
     "Ichibankuji Club | BANDAI SPIRITS Official Ichibankuji Information Site",
     # 출시 전 一番くじONLINE 플레이스홀더 페이지의 h1 — 실제 제목은 <title>에 있음
     "一番くじONLINE",
+    # 사이트명만 있는 제목 (옛 온라인 쿠지 페이지 등)
+    "一番くじ倶楽部",
 }
+
+# 제목에 섞여 들어오는 사이트명 세그먼트 (lib/data.ts의 SITE_SEGMENT_RE와 동일하게 유지)
+SITE_SEGMENT_RE = re.compile(
+    r"^(一番くじ倶楽部|BANDAI SPIRITS公式\s*一番くじ情報サイト"
+    r"|Ichiban ?[Kk]uji Club|Ichibankuji Club"
+    r"|BANDAI SPIRITS Official Ichibankuji Information Site"
+    r"|이치 ?반 쿠지 클럽|BANDAI SPIRITS 공식 이치 ?반 쿠지 정보 사이트)$"
+)
+
+
+def clean_title(raw: str) -> str:
+    """제목에서 사이트명 세그먼트(｜/| 구분)를 제거. 사이트명뿐이면 ''."""
+    parts = [s.strip() for s in re.split(r"[|｜]", raw or "")]
+    kept = [s for s in parts if s and not SITE_SEGMENT_RE.match(s)]
+    t = " ".join(kept).strip()
+    return "" if t.endswith("特設ページ") else t
 
 
 def is_bad_title(title: str) -> bool:
@@ -155,23 +173,22 @@ async def scrape_product_detail(page, slug: str, fallback_title: str = "") -> di
 
         # 타이틀 추출 함수
         def extract_title(s: BeautifulSoup) -> str:
-            # h1 → og:title → <title> 순으로 시도
+            # h1 → og:title → <title> 순으로 시도. 각 후보에서 사이트명 세그먼트 제거.
             h1 = s.find("h1")
             if h1:
-                t = h1.get_text(strip=True)
+                t = clean_title(h1.get_text(strip=True))
                 if not is_bad_title(t):
                     return t
 
             og = s.find("meta", property="og:title")
             if og:
-                t = og.get("content", "").strip()
+                t = clean_title(og.get("content", "").strip())
                 if not is_bad_title(t):
                     return t
 
             title_tag = s.find("title")
             if title_tag:
-                raw = title_tag.get_text(strip=True)
-                t = raw.split("|")[0].split("｜")[0].strip()
+                t = clean_title(title_tag.get_text(strip=True))
                 if not is_bad_title(t):
                     return t
             return ""

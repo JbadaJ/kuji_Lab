@@ -25,6 +25,22 @@ function cleanPrizeImages(prizes: Prize[]): Prize[] {
   }))
 }
 
+// 스크랩된 제목에 섞여 들어오는 사이트명 세그먼트 (｜ 또는 | 로 구분됨).
+// 예: "一番くじ倶楽部 | 星のカービィ..." / "...｜一番くじ倶楽部｜BANDAI SPIRITS公式..."
+const SITE_SEGMENT_RE = /^(一番くじ倶楽部|BANDAI SPIRITS公式\s*一番くじ情報サイト|Ichiban\s?[Kk]uji Club|Ichibankuji Club|BANDAI SPIRITS Official Ichibankuji Information Site|이치\s?반 쿠지 클럽|BANDAI SPIRITS 공식 이치\s?반 쿠지 정보 사이트)$/
+
+/** 제목에서 사이트명 세그먼트를 제거. 사이트명뿐이면 '' (→ 목록에서 제외됨). */
+export function cleanProductTitle(raw: string): string {
+  const cleaned = raw
+    .split(/[|｜]/)
+    .map(s => s.trim())
+    .filter(s => s && !SITE_SEGMENT_RE.test(s))
+    .join(' ')
+    .trim()
+  // "○○特設ページ"는 상품이 아니라 특설 페이지 링크
+  return cleaned.endsWith('特設ページ') ? '' : cleaned
+}
+
 // 캐시는 반드시 globalThis에 저장한다. Turbopack이 이 모듈을 라우트(청크)마다
 // 별도 사본으로 번들하므로, 모듈 변수로 두면 /api/update의 clearCache()가
 // 페이지들이 쓰는 캐시 인스턴스를 비우지 못한다. 파일 stamp(mtime+size)를 함께
@@ -72,7 +88,9 @@ function loadAll(): KujiProduct[] {
         console.error(`[data] ${file}: expected array, got ${typeof parsed}`)
         continue
       }
-      all.push(...(parsed as KujiProduct[]))
+      for (const p of parsed as KujiProduct[]) {
+        all.push({ ...p, title: cleanProductTitle(p.title || '') })
+      }
     } catch (err) {
       console.error(`[data] Failed to load ${file}:`, err)
     }
