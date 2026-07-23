@@ -9,6 +9,9 @@ import { useDrawHistory } from '@/app/hooks/useDrawHistory'
 
 import type { Ticket, SimulatorConfig, AutoDrawConfig, AutoDrawSpeed, AutoResult } from './simulator/types'
 import { buildTickets } from './simulator/core'
+import { getEffectProfile } from './simulator/effects'
+import { playAutoDrawSound } from './simulator/sound'
+import SoundControl from './simulator/SoundControl'
 import SetupScreen from './simulator/SetupScreen'
 import RevealOverlay from './simulator/RevealOverlay'
 import { GradeStatusBar, GradeStatusPanel } from './simulator/GradeStatus'
@@ -191,12 +194,14 @@ export default function SimulatorModal({ product, prizes, onClose, initialConfig
       setTickets(prev => prev.map(tk => tk.id === pick.id ? { ...tk, drawn: true } : tk))
       setSessionDraws(n => n + 1)
       setAutoDrawCount(drawnList.length)
+      // 연속 뽑기 중에는 짧은 틱만, 티어 2 이상만 풀 사운드
+      playAutoDrawSound(getEffectProfile(pick.grade, gradeTotals.get(pick.grade) ?? 0, pick.prize))
 
       setTimeout(() => tick(next), delay)
     }
 
     tick(tickets.filter(tk => !tk.drawn))
-  }, [tickets])
+  }, [tickets, gradeTotals])
 
   const cancelAutoDraw = useCallback(() => {
     autoDrawActive.current = false
@@ -289,6 +294,7 @@ export default function SimulatorModal({ product, prizes, onClose, initialConfig
           </button>
           <span className="text-sm font-semibold text-zinc-200 truncate flex-1 min-w-0">{product.title}</span>
           <div className="flex items-center gap-2 flex-shrink-0">
+            <SoundControl />
             <div className="flex flex-col items-end leading-tight">
               <span className="text-xs text-zinc-500 tabular-nums">{drawn.length} / {tickets.length}</span>
               {drawsLeft !== null && (

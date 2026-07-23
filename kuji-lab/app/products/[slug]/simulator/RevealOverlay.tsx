@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import Image from 'next/image'
 import { getGradeLetter } from '@/lib/utils'
 import { useLanguage } from '@/app/contexts/LanguageContext'
 import { translateGrade } from '@/lib/i18n'
 import type { Ticket, SparkleData, FireworkParticle } from './types'
 import { GRADE_STYLE, DEFAULT_STYLE } from './types'
-import { getEffectProfile, generateTierSparkles, generateFullscreenFireworks, playDrawSound } from './effects'
+import { getEffectProfile, generateTierSparkles, generateFullscreenFireworks } from './effects'
+import { playRevealSound, startRiser, updateRiser, stopRiser } from './sound'
 import { TicketFront } from './TicketCard'
 
 export default function RevealOverlay({ ticket, onComplete, totalForGrade }: {
@@ -39,21 +40,26 @@ export default function RevealOverlay({ ticket, onComplete, totalForGrade }: {
 
   const triggerReveal = useCallback(() => {
     isDragging.current = false
+    stopRiser()
     setIsSnapping(true)
     setDragProgress(1)
     setTimeout(() => {
       setPhase('revealed')
       setSparkles(generateTierSparkles(ticket.grade, profile))
       setFireworks(generateFullscreenFireworks(ticket.grade, profile))
-      playDrawSound(profile)
+      playRevealSound(profile)
     }, 320)
   }, [ticket.grade, profile])
+
+  // 오버레이가 닫힐 때 라이저가 남아있지 않도록 정리
+  useEffect(() => stopRiser, [])
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (phase === 'revealed') return
     isDragging.current = true
     startX.current = e.clientX
     e.currentTarget.setPointerCapture(e.pointerId)
+    startRiser()
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -62,6 +68,7 @@ export default function RevealOverlay({ ticket, onComplete, totalForGrade }: {
     const cardW = cardRef.current?.offsetWidth ?? 320
     const progress = Math.max(0, Math.min(1, delta / (cardW * 0.65)))
     if (progress >= 1) { triggerReveal(); return }
+    updateRiser(progress)
     setDragProgress(progress)
   }
 
@@ -71,6 +78,7 @@ export default function RevealOverlay({ ticket, onComplete, totalForGrade }: {
     if (dragProgress >= 0.38) {
       triggerReveal()
     } else {
+      stopRiser()
       setIsSnapping(true)
       setDragProgress(0)
       setTimeout(() => setIsSnapping(false), 300)

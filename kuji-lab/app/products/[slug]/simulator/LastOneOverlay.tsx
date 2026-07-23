@@ -8,6 +8,7 @@ import { translateGrade } from '@/lib/i18n'
 import type { SparkleData } from './types'
 import { GRADE_STYLE } from './types'
 import { generateSparkles } from './effects'
+import { playRevealSound } from './sound'
 
 export default function LastOneOverlay({ prize, locale, onClose }: { prize: Prize; locale: string; onClose: () => void }) {
   const { t } = useLanguage()
@@ -20,6 +21,7 @@ export default function LastOneOverlay({ prize, locale, onClose }: { prize: Priz
     const t = requestAnimationFrame(() => {
       setVisible(true)
       setSparkles(generateSparkles('ラストワン賞'))
+      playRevealSound({ tier: 4, isRainbow: true, isHiddenGem: false })
     })
     return () => cancelAnimationFrame(t)
   }, [])
