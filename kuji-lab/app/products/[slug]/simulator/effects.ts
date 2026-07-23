@@ -1,4 +1,62 @@
+import type { Prize } from '@/types/kuji'
 import type { SparkleData, FireworkParticle } from './types'
+
+// ── Effect tier ─────────────────────────────────────────────────────────────
+//
+// 연출 강도는 등급만이 아니라 3가지 신호의 조합으로 결정한다:
+//   1. 등급 순위 (A=3, B/C=2, D=1, E이하=0)
+//   2. 희귀도 — 해당 등급 티켓 수가 3장 이하면 +1
+//   3. 숨은 레어 — E賞 이하인데 피규어급 상품이면 최소 티어 2 + 전용 연출
+// 티어 4(레인보우)는 "A賞이면서 희귀"일 때만 도달한다.
+
+export type EffectTier = 0 | 1 | 2 | 3 | 4
+
+export interface EffectProfile {
+  tier: EffectTier
+  isRainbow: boolean
+  isHiddenGem: boolean
+}
+
+const FIGURE_RE = /フィギュア|ソフビ|スタチュー|masterlise|マスターライズ/i
+
+export function looksLikeFigure(prize: Pick<Prize, 'name' | 'full_name' | 'description'>): boolean {
+  return FIGURE_RE.test(`${prize.name} ${prize.full_name} ${prize.description ?? ''}`)
+}
+
+/** A賞=0, B賞=1, ... ラストワン賞=-1, 그 외=99 */
+export function gradeRank(grade: string): number {
+  const m = grade.match(/^([A-Z])賞$/)
+  if (m) return m[1].charCodeAt(0) - 65
+  if (grade === 'ラストワン賞') return -1
+  return 99
+}
+
+export function getEffectProfile(
+  grade: string,
+  totalForGrade: number,
+  prize?: Pick<Prize, 'name' | 'full_name' | 'description'>
+): EffectProfile {
+  const rank = gradeRank(grade)
+  if (rank === -1) return { tier: 4, isRainbow: true, isHiddenGem: false }
+
+  const isRare = totalForGrade > 0 && totalForGrade <= 3
+  const isHiddenGem = rank >= 4 && rank < 99 && !!prize && looksLikeFigure(prize)
+
+  let tier: number =
+    rank === 0 ? 3 :
+    rank <= 2  ? 2 :
+    rank === 3 ? 1 : 0
+
+  if (isHiddenGem) tier = Math.max(tier, 2)
+  if (isRare) tier += 1
+
+  // 레인보우(티어 4)는 A賞 전용 — 다른 등급은 티어 3에서 캡
+  const isRainbow = tier >= 4 && rank === 0
+  if (tier >= 4 && !isRainbow) tier = 3
+  if (tier > 4) tier = 4
+
+  return { tier: tier as EffectTier, isRainbow, isHiddenGem }
+}
 
 // ── Sparkle color palettes ──────────────────────────────────────────────────
 
@@ -16,6 +74,14 @@ export const SPARKLE_COLORS: Record<string, string[]> = {
 }
 
 const RAINBOW_COLORS = ['#ff0000','#ff6600','#ffcc00','#00ff44','#00ccff','#0044ff','#cc00ff','#ff00aa','#ffffff','#ffee88']
+const HIDDEN_GEM_EXTRA = ['#fbbf24', '#fde68a', '#ffffff']
+
+function paletteFor(grade: string, profile?: EffectProfile): string[] {
+  if (profile?.isRainbow) return RAINBOW_COLORS
+  const base = SPARKLE_COLORS[grade] ?? ['#fff', '#aaa']
+  // 숨은 레어는 등급 색상에 금색·흰색을 섞어 "반짝 발견" 느낌을 준다
+  return profile?.isHiddenGem ? [...base, ...HIDDEN_GEM_EXTRA] : base
+}
 
 // ── Sparkle generators ──────────────────────────────────────────────────────
 
@@ -37,15 +103,22 @@ function generateParticles(count: number, colors: string[], distMin: number, dis
   })
 }
 
-export function generateRainbowSparkles(): SparkleData[] {
-  return generateParticles(70, RAINBOW_COLORS, 120, 400, 7, 23, 0.6, 0.3)
+// 티어별 파티클 수·크기·퍼짐 (0=일반 → 4=레인보우)
+const TIER_SPARKLES = [
+  { count: 12, distMax: 200, sizeMax: 11 },
+  { count: 20, distMax: 240, sizeMax: 13 },
+  { count: 32, distMax: 280, sizeMax: 15 },
+  { count: 46, distMax: 330, sizeMax: 18 },
+  { count: 70, distMax: 400, sizeMax: 23 },
+]
+
+export function generateTierSparkles(grade: string, profile: EffectProfile): SparkleData[] {
+  const cfg = TIER_SPARKLES[profile.tier]
+  const colors = paletteFor(grade, profile)
+  return generateParticles(cfg.count, colors, 80, cfg.distMax, 4 + profile.tier, cfg.sizeMax, 0.35 + profile.tier * 0.06, 0.4)
 }
 
-export function generateRareSparkles(grade: string): SparkleData[] {
-  const colors = SPARKLE_COLORS[grade] ?? ['#fff', '#aaa']
-  return generateParticles(36, colors, 100, 300, 6, 18, 0.5, 0.4)
-}
-
+/** LastOneOverlay 등 프로필 없이 쓰는 기본 스파클 */
 export function generateSparkles(grade: string): SparkleData[] {
   const isHighTier = grade === 'A賞' || grade === 'ラストワン賞'
   const count = isHighTier ? 28 : grade === 'B賞' || grade === 'C賞' ? 18 : 12
@@ -60,28 +133,36 @@ export function generateSparkles(grade: string): SparkleData[] {
 
 // ── Full-screen fireworks ───────────────────────────────────────────────────
 
-export function generateFullscreenFireworks(grade: string, isRare: boolean, isRainbow: boolean): FireworkParticle[] {
-  const colors  = isRainbow ? RAINBOW_COLORS : (SPARKLE_COLORS[grade] ?? ['#fff', '#ffcc00'])
-  const bursts  = isRainbow ? 9 : isRare ? 6 : 4
-  const perBurst = isRainbow ? 22 : isRare ? 16 : 11
+// 티어별 폭죽: 터지는 횟수·파편 수·퍼짐이 단계적으로 커진다
+const TIER_FIREWORKS = [
+  { bursts: 2,  perBurst: 9,  dist: 55,  sizeBase: 3 },
+  { bursts: 4,  perBurst: 11, dist: 65,  sizeBase: 4 },
+  { bursts: 6,  perBurst: 14, dist: 85,  sizeBase: 5 },
+  { bursts: 8,  perBurst: 18, dist: 105, sizeBase: 6 },
+  { bursts: 10, perBurst: 22, dist: 130, sizeBase: 7 },
+]
+
+export function generateFullscreenFireworks(grade: string, profile: EffectProfile): FireworkParticle[] {
+  const cfg = TIER_FIREWORKS[profile.tier]
+  const colors = paletteFor(grade, profile)
   const result: FireworkParticle[] = []
   let id = 0
 
-  for (let b = 0; b < bursts; b++) {
+  for (let b = 0; b < cfg.bursts; b++) {
     const ox = 7 + Math.random() * 86
     const oy = 5 + Math.random() * 82
     const burstDelay = b * 0.14
 
-    for (let p = 0; p < perBurst; p++) {
-      const angle = (p / perBurst) * Math.PI * 2 + Math.random() * 0.7
-      const dist  = (isRainbow ? 130 : isRare ? 95 : 65) + Math.random() * 110
+    for (let p = 0; p < cfg.perBurst; p++) {
+      const angle = (p / cfg.perBurst) * Math.PI * 2 + Math.random() * 0.7
+      const dist  = cfg.dist + Math.random() * 110
       result.push({
         id: id++,
         ox, oy,
         tx: Math.cos(angle) * dist,
         ty: Math.sin(angle) * dist,
         color: colors[Math.floor(Math.random() * colors.length)],
-        size: isRainbow ? 7 + Math.random() * 9 : isRare ? 5 + Math.random() * 7 : 4 + Math.random() * 6,
+        size: cfg.sizeBase + Math.random() * (cfg.sizeBase + 2),
         delay: burstDelay + Math.random() * 0.18,
         duration: 0.75 + Math.random() * 0.55,
         diamond: Math.random() > 0.45,
@@ -93,7 +174,7 @@ export function generateFullscreenFireworks(grade: string, isRare: boolean, isRa
 
 // ── Sound effects via Web Audio API ─────────────────────────────────────────
 
-export function playDrawSound(grade: string, isRare: boolean, isRainbow: boolean) {
+export function playDrawSound(profile: EffectProfile) {
   if (typeof window === 'undefined') return
   try {
     const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -114,7 +195,8 @@ export function playDrawSound(grade: string, isRare: boolean, isRainbow: boolean
 
     const now = ctx.currentTime
 
-    if (isRainbow) {
+    if (profile.isRainbow) {
+      // 티어 4 — 팡파레
       const fanfare  = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1568.00]
       const harmony  = [392.00, 493.88, 587.33, 783.99]
       fanfare.forEach((f, i) => note(f, 'sine', now + i * 0.09, 0.6, 0.3))
@@ -122,13 +204,33 @@ export function playDrawSound(grade: string, isRare: boolean, isRainbow: boolean
       note(2093, 'sine', now + 0.5, 0.9, 0.15)
       note(2637, 'sine', now + 0.65, 0.7, 0.1)
       note(880, 'sawtooth', now, 0.07, 0.06, 440)
-    } else if (isRare) {
+    } else if (profile.tier === 3) {
+      // 확장 아르페지오 + 차임
+      const arp = [440, 554.37, 659.25, 880]
+      arp.forEach((f, i) => note(f, 'sine', now + i * 0.11, 0.5, 0.26))
+      note(1318.51, 'sine', now + 0.4, 0.6, 0.14)
+      note(1760, 'sine', now + 0.55, 0.5, 0.08)
+    } else if (profile.tier === 2) {
+      // 3음 아르페지오
       const arp = [440, 554.37, 659.25]
       arp.forEach((f, i) => note(f, 'sine', now + i * 0.13, 0.5, 0.26))
       note(1318.51, 'sine', now + 0.35, 0.55, 0.13)
+    } else if (profile.tier === 1) {
+      // 밝은 2음 상승
+      note(523.25, 'sine', now, 0.16, 0.28)
+      note(783.99, 'sine', now + 0.12, 0.3, 0.22)
+      note(1567.98, 'sine', now + 0.18, 0.25, 0.08)
     } else {
+      // 기본 팝
       note(700, 'sine', now, 0.18, 0.32, 220)
       note(1100, 'sine', now + 0.01, 0.07, 0.14)
+    }
+
+    // 숨은 레어 — 기본음 뒤에 "어?" 하는 서프라이즈 상승 글리산도 + 트윙클
+    if (profile.isHiddenGem && !profile.isRainbow) {
+      note(880, 'sine', now + 0.3, 0.35, 0.16, 1760)
+      note(1568, 'sine', now + 0.55, 0.4, 0.12)
+      note(2093, 'sine', now + 0.68, 0.5, 0.1)
     }
 
     setTimeout(() => ctx.close(), 3000)

@@ -59,6 +59,7 @@ export interface Translations {
   simulatorDrawRandom: string   // {count} placeholder
   simulatorPullHint: string
   simulatorConfirm: string
+  simulatorHiddenGem: string
   simulatorSetupButton: string
   simulatorProbButton: string
   simulatorSessionLeft: string  // {count}
@@ -214,6 +215,7 @@ export const translations: Record<Locale, Translations> = {
     simulatorDrawRandom: '랜덤으로 뽑기 · 남은 {count}장',
     simulatorPullHint: '오른쪽으로 드래그하여 열기',
     simulatorConfirm: '확인',
+    simulatorHiddenGem: '숨은 레어!',
     simulatorSetupButton: '설정',
     simulatorProbButton: '확률',
     simulatorSessionLeft: '세션 {count}회 남음',
@@ -356,6 +358,7 @@ export const translations: Record<Locale, Translations> = {
     simulatorDrawRandom: 'ランダムで引く · 残り{count}枚',
     simulatorPullHint: '右へドラッグして開ける',
     simulatorConfirm: '確認',
+    simulatorHiddenGem: '隠れレア！',
     simulatorSetupButton: '設定',
     simulatorProbButton: '確率',
     simulatorSessionLeft: 'セッション残り{count}回',
@@ -498,6 +501,7 @@ export const translations: Record<Locale, Translations> = {
     simulatorDrawRandom: 'Draw Random · {count} left',
     simulatorPullHint: 'Drag right to open',
     simulatorConfirm: 'OK',
+    simulatorHiddenGem: 'Hidden gem!',
     simulatorSetupButton: 'Setup',
     simulatorProbButton: 'Odds',
     simulatorSessionLeft: '{count} draws left',

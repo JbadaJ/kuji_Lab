@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import Image from 'next/image'
 import { getGradeLetter } from '@/lib/utils'
 import { useLanguage } from '@/app/contexts/LanguageContext'
 import { translateGrade } from '@/lib/i18n'
 import type { Ticket, SparkleData, FireworkParticle } from './types'
 import { GRADE_STYLE, DEFAULT_STYLE } from './types'
-import { generateSparkles, generateRareSparkles, generateRainbowSparkles, generateFullscreenFireworks, playDrawSound } from './effects'
+import { getEffectProfile, generateTierSparkles, generateFullscreenFireworks, playDrawSound } from './effects'
 import { TicketFront } from './TicketCard'
 
 export default function RevealOverlay({ ticket, onComplete, totalForGrade }: {
@@ -28,10 +28,14 @@ export default function RevealOverlay({ ticket, onComplete, totalForGrade }: {
 
   const style = GRADE_STYLE[ticket.grade] ?? DEFAULT_STYLE
   const gradeLabel = translateGrade(ticket.grade, locale as 'ko' | 'ja' | 'en')
-  const isHighTier = ticket.grade === 'A賞' || ticket.grade === 'ラストワン賞'
   const isLastOne = ticket.grade === 'ラストワン賞'
-  const isRare    = totalForGrade > 0 && totalForGrade <= 3
-  const isRainbow = isRare && ticket.grade === 'A賞'
+  const profile = useMemo(
+    () => getEffectProfile(ticket.grade, totalForGrade, ticket.prize),
+    [ticket.grade, ticket.prize, totalForGrade]
+  )
+  const isRainbow = profile.isRainbow
+  const isPulse = profile.tier >= 2 && !isRainbow      // 강조 펄스 연출 (티어 2+)
+  const shineInfinite = profile.tier >= 3              // 카드 광택 반복 (티어 3+)
 
   const triggerReveal = useCallback(() => {
     isDragging.current = false
@@ -39,13 +43,11 @@ export default function RevealOverlay({ ticket, onComplete, totalForGrade }: {
     setDragProgress(1)
     setTimeout(() => {
       setPhase('revealed')
-      if (isRainbow) setSparkles(generateRainbowSparkles())
-      else if (isRare) setSparkles(generateRareSparkles(ticket.grade))
-      else setSparkles(generateSparkles(ticket.grade))
-      setFireworks(generateFullscreenFireworks(ticket.grade, isRare, isRainbow))
-      playDrawSound(ticket.grade, isRare, isRainbow)
+      setSparkles(generateTierSparkles(ticket.grade, profile))
+      setFireworks(generateFullscreenFireworks(ticket.grade, profile))
+      playDrawSound(profile)
     }, 320)
-  }, [ticket.grade, isRainbow, isRare])
+  }, [ticket.grade, profile])
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (phase === 'revealed') return
@@ -119,10 +121,11 @@ export default function RevealOverlay({ ticket, onComplete, totalForGrade }: {
           }} />
         </>
       )}
-      {phase === 'revealed' && isRare && !isRainbow && (
+      {phase === 'revealed' && isPulse && (
         <>
           <div className="absolute rounded-full blur-3xl pointer-events-none" style={{
-            width: 560, height: 420, background: style.glow, opacity: 0.75,
+            width: 480 + profile.tier * 40, height: 360 + profile.tier * 30,
+            background: style.glow, opacity: 0.55 + profile.tier * 0.1,
             animation: 'kuji-rare-pulse 1s ease-in-out infinite',
           }} />
           <div className="absolute rounded-full pointer-events-none" style={{
@@ -133,7 +136,7 @@ export default function RevealOverlay({ ticket, onComplete, totalForGrade }: {
           }} />
         </>
       )}
-      {phase === 'revealed' && !isRare && (
+      {phase === 'revealed' && !isPulse && !isRainbow && (
         <div className="absolute rounded-full blur-3xl opacity-50 pointer-events-none"
           style={{ width: 400, height: 300, background: style.glow }} />
       )}
@@ -159,7 +162,7 @@ export default function RevealOverlay({ ticket, onComplete, totalForGrade }: {
           }} />
         )}
         {/* Rare pulsing border */}
-        {phase === 'revealed' && isRare && !isRainbow && (
+        {phase === 'revealed' && isPulse && (
           <div style={{
             position: 'absolute', inset: -4, borderRadius: 21,
             background: style.glow,
@@ -179,7 +182,7 @@ export default function RevealOverlay({ ticket, onComplete, totalForGrade }: {
                 position: 'absolute', top: '-50%', width: '45%', height: '200%',
                 background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent)',
                 transform: 'skewX(-15deg)',
-                animation: `kuji-shine ${isHighTier ? '1.4s' : '2.2s'} 0.25s ease-in-out ${isHighTier ? 'infinite' : '1'}`,
+                animation: `kuji-shine ${shineInfinite ? '1.4s' : '2.2s'} 0.25s ease-in-out ${shineInfinite ? 'infinite' : '1'}`,
               }} />
             </div>
           )}
@@ -193,7 +196,14 @@ export default function RevealOverlay({ ticket, onComplete, totalForGrade }: {
             </span>
           )}
           <div className="flex flex-col items-center gap-1 flex-shrink-0" style={{ zIndex: 2 }}>
-            <span className={`text-sm font-bold px-4 py-1 rounded-full ${style.badge}`}>{gradeLabel}</span>
+            <div className="flex items-center gap-1.5">
+              <span className={`text-sm font-bold px-4 py-1 rounded-full ${style.badge}`}>{gradeLabel}</span>
+              {phase === 'revealed' && profile.isHiddenGem && (
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-fuchsia-400 text-white animate-pulse whitespace-nowrap">
+                  ✨ {t.simulatorHiddenGem}
+                </span>
+              )}
+            </div>
             {phase === 'revealed' && (
               <p className="text-xs text-zinc-500 dark:text-zinc-400 text-center line-clamp-1 max-w-[90%]">{ticket.prize.name}</p>
             )}
@@ -237,7 +247,7 @@ export default function RevealOverlay({ ticket, onComplete, totalForGrade }: {
         {phase === 'revealed' && !isRainbow && (
           <div className="absolute inset-0 rounded-2xl pointer-events-none" style={{
             background: style.glow, opacity: 0,
-            animation: `kuji-flash ${isRare ? '0.7s' : '0.55s'} ease-out forwards`, zIndex: 5,
+            animation: `kuji-flash ${isPulse ? '0.7s' : '0.55s'} ease-out forwards`, zIndex: 5,
           }} />
         )}
         {phase === 'revealed' && isRainbow && (
