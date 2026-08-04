@@ -2,6 +2,11 @@
  * Shared utility functions used across ProductGrid, ProductDetail, etc.
  */
 
+// 홈 그리드 페이지 크기. 서버(page.tsx)와 클라이언트(ProductGrid) 양쪽에서 쓰므로
+// 'use client' 모듈이 아닌 여기에 둔다 (클라이언트 모듈의 값 export를 서버
+// 컴포넌트가 import하면 클라이언트 참조 프록시가 되어 숫자로 동작하지 않음).
+export const HOME_PAGE_SIZE = 24
+
 /**
  * Normalize sale_type values (which may be translated or variant strings)
  * to canonical Japanese form: '店頭販売' or 'オンライン販売'.

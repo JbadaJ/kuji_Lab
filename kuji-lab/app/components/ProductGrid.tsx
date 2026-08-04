@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import type { ProductSummary } from '@/types/kuji'
 import { IP_CATEGORIES, IP_LIST, getDisplayName } from '@/lib/aliases'
-import { normalizeSaleType } from '@/lib/utils'
+import { normalizeSaleType, HOME_PAGE_SIZE } from '@/lib/utils'
 import { useLanguage } from '@/app/contexts/LanguageContext'
 import { fmt } from '@/lib/i18n'
 import { useTranslate } from '@/app/hooks/useTranslate'
@@ -13,11 +13,12 @@ import { useWishlist } from '@/app/hooks/useWishlist'
 import { useProductFilters } from '@/app/hooks/useProductFilters'
 
 interface Props {
-  products: ProductSummary[]
+  initialProducts: ProductSummary[]
+  totalCount: number
   years: string[]
 }
 
-const PAGE_SIZE = 24
+const PAGE_SIZE = HOME_PAGE_SIZE
 
 // Maps category ID → translation key in `t`
 const CATEGORY_KEY: Record<string, keyof import('@/lib/i18n').Translations> = {
@@ -51,11 +52,12 @@ function SaleBadge({ types }: { types: string[] }) {
   )
 }
 
-function ProductCard({ product, displayTitle, isWishlisted, onToggleWishlist }: {
+function ProductCard({ product, displayTitle, isWishlisted, onToggleWishlist, priority }: {
   product: ProductSummary
   displayTitle: string
   isWishlisted: boolean
   onToggleWishlist: (slug: string) => void
+  priority?: boolean
 }) {
   const { t } = useLanguage()
   return (
@@ -69,6 +71,7 @@ function ProductCard({ product, displayTitle, isWishlisted, onToggleWishlist }: 
               fill
               className="object-cover group-hover:scale-[1.02] transition-transform duration-300"
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+              priority={priority}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-zinc-400 dark:text-zinc-500 text-sm">
@@ -240,12 +243,34 @@ function IpSelectorPanel({ selected, onSelect, onClose, availableIds }: IpPanelP
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-export default function ProductGrid({ products, years }: Props) {
+export default function ProductGrid({ initialProducts, totalCount, years }: Props) {
   const { t, locale } = useLanguage()
   const { wishlist, toggle: toggleWishlist, has: isWishlisted } = useWishlist()
   const [activeTab, setActiveTab] = useState<'all' | 'wishlist'>('all')
   const [ipPanelOpen, setIpPanelOpen] = useState(false)
   const ipButtonRef = useRef<HTMLDivElement>(null)
+
+  // 서버는 첫 페이지 분량만 내려보내므로 마운트 후 전체 목록을 가져온다.
+  const [products, setProducts] = useState(initialProducts)
+  const [fullLoaded, setFullLoaded] = useState(initialProducts.length >= totalCount)
+
+  useEffect(() => {
+    if (fullLoaded) return
+    let cancelled = false
+    fetch('/api/summaries')
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.json()
+      })
+      .then((data: ProductSummary[]) => {
+        if (!cancelled && Array.isArray(data)) {
+          setProducts(data)
+          setFullLoaded(true)
+        }
+      })
+      .catch(err => console.error('[grid] failed to load full product list:', err))
+    return () => { cancelled = true }
+  }, [fullLoaded])
 
   const {
     query, setQuery,
@@ -264,8 +289,15 @@ export default function ProductGrid({ products, years }: Props) {
     [activeTab, wishlist, filtered, products]
   )
 
+  // 전체 목록 로드 전에는 서버가 알려준 총 개수를 기준으로 표시한다
+  const filtersActive =
+    !!query.trim() || yearFilter !== 'all' || monthFilter !== 'all' || saleFilter !== 'all' || !!ipFilter
+  const gridTotal = fullLoaded || filtersActive ? filtered.length : totalCount
+
   const visible = displayProducts.slice(0, page * PAGE_SIZE)
-  const hasMore = visible.length < displayProducts.length
+  const hasMore =
+    visible.length < displayProducts.length ||
+    (activeTab === 'all' && !fullLoaded && !filtersActive && visible.length < totalCount)
   const selectedIpEntry = ipFilter ? IP_LIST.find(e => e.id === ipFilter) : null
   const selectedIpName = selectedIpEntry ? getDisplayName(selectedIpEntry, locale) : null
 
@@ -408,7 +440,7 @@ export default function ProductGrid({ products, years }: Props) {
         <span>
           {activeTab === 'wishlist'
             ? fmt(t.wishlistCount, { count: displayProducts.length })
-            : fmt(t.gridCount, { count: filtered.length })}
+            : fmt(t.gridCount, { count: gridTotal })}
           {selectedIpName && <span> — {selectedIpName}</span>}
           {query && <span> — {fmt(t.gridSearchSuffix, { query })}</span>}
         </span>
@@ -433,6 +465,7 @@ export default function ProductGrid({ products, years }: Props) {
               displayTitle={translatedTitles[i] ?? p.title}
               isWishlisted={isWishlisted(p.slug)}
               onToggleWishlist={toggleWishlist}
+              priority={i < 4}
             />
           ))}
         </div>
@@ -454,7 +487,7 @@ export default function ProductGrid({ products, years }: Props) {
             onClick={() => setPage(p => p + 1)}
             className="px-8 py-2.5 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
           >
-            {t.gridLoadMore} ({fmt(t.gridRemaining, { count: filtered.length - visible.length })})
+            {t.gridLoadMore} ({fmt(t.gridRemaining, { count: Math.max(gridTotal - visible.length, 0) })})
           </button>
         </div>
       )}

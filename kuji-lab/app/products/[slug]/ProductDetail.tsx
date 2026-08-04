@@ -10,17 +10,24 @@ import { useLanguage } from '@/app/contexts/LanguageContext'
 import { fmt, translateGrade, translateVariants } from '@/lib/i18n'
 import { useTranslate } from '@/app/hooks/useTranslate'
 import LanguageSwitcher from '@/app/components/LanguageSwitcher'
-import SimulatorModal, { type SimulatorConfig } from './SimulatorModal'
-import type { SimSearchParams } from './page'
+import nextDynamic from 'next/dynamic'
+import type { SimulatorConfig } from './SimulatorModal'
 
-function parseSimConfig(sp: SimSearchParams): SimulatorConfig | null {
-  if (!sp.sim) return null
+// 시뮬레이터(사운드 신스 포함)는 열 때만 로드 — 상세 페이지 초기 번들에서 제외
+const SimulatorModal = nextDynamic(() => import('./SimulatorModal'), { ssr: false })
+
+/** 공유 URL의 ?sim=... 파라미터를 마운트 후 클라이언트에서 파싱한다 */
+function parseSimConfigFromUrl(): SimulatorConfig | null {
+  const sp = new URLSearchParams(window.location.search)
+  if (!sp.get('sim')) return null
+  const modeParam = sp.get('mode')
   const mode: SimulatorConfig['mode'] = (
-    sp.mode === 'random' || sp.mode === 'custom' ? sp.mode : 'default'
+    modeParam === 'random' || modeParam === 'custom' ? modeParam : 'default'
   )
   const preDrawn: Record<string, number> = {}
-  if (sp.pre) {
-    for (const part of sp.pre.split(',')) {
+  const pre = sp.get('pre')
+  if (pre) {
+    for (const part of pre.split(',')) {
       const colonIdx = part.lastIndexOf(':')
       if (colonIdx > 0) {
         const key = part.slice(0, colonIdx)
@@ -31,7 +38,8 @@ function parseSimConfig(sp: SimSearchParams): SimulatorConfig | null {
       }
     }
   }
-  const limitNum = sp.limit ? parseInt(sp.limit, 10) : NaN
+  const limitRaw = sp.get('limit')
+  const limitNum = limitRaw ? parseInt(limitRaw, 10) : NaN
   const drawLimit = !isNaN(limitNum) && limitNum > 0 ? limitNum : null
   return { mode, preDrawn, drawLimit }
 }
@@ -172,12 +180,21 @@ function PrizeList({ prizes, locale, t, onImageClick }: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ProductDetail({ product, initialSim }: { product: KujiProduct; initialSim?: SimSearchParams }) {
+export default function ProductDetail({ product }: { product: KujiProduct }) {
   const { t, locale } = useLanguage()
   const router = useRouter()
-  const initialConfig = useMemo(() => initialSim ? parseSimConfig(initialSim) : null, [initialSim])
-  const [simulatorOpen, setSimulatorOpen] = useState(() => !!initialConfig)
+  const [initialConfig, setInitialConfig] = useState<SimulatorConfig | null>(null)
+  const [simulatorOpen, setSimulatorOpen] = useState(false)
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null)
+
+  // 공유된 시뮬레이터 딥링크는 마운트 후 URL에서 읽어 자동으로 연다
+  useEffect(() => {
+    const cfg = parseSimConfigFromUrl()
+    if (cfg) {
+      setInitialConfig(cfg)
+      setSimulatorOpen(true)
+    }
+  }, [])
   const openLightbox = useCallback((src: string, alt: string) => setLightbox({ src, alt }), [])
   const closeLightbox = useCallback(() => setLightbox(null), [])
 

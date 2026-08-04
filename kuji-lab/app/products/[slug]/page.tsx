@@ -3,16 +3,12 @@ import { notFound } from 'next/navigation'
 import { getProductBySlug } from '@/lib/data'
 import ProductDetail from './ProductDetail'
 
-export interface SimSearchParams {
-  sim?: string
-  mode?: string
-  pre?: string
-  limit?: string
-}
+// 시뮬레이터 딥링크(?sim=...)는 ProductDetail이 클라이언트에서 파싱하므로
+// 이 페이지는 searchParams에 의존하지 않는다 → ISR 캐시 가능
+export const revalidate = 86400
 
 interface Props {
   params: Promise<{ slug: string }>
-  searchParams: Promise<SimSearchParams>
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -45,14 +41,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default async function ProductPage({ params, searchParams }: Props) {
+export default async function ProductPage({ params }: Props) {
   const { slug } = await params
-  const sp = await searchParams
   const product = getProductBySlug(slug)
 
   if (!product || !product.title) {
     notFound()
   }
 
-  return <ProductDetail product={product} initialSim={sp} />
+  return <ProductDetail product={product} />
 }

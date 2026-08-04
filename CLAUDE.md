@@ -13,7 +13,7 @@ kuji_Lab/
 
 All three planned phases are **implemented**: search/browse, solo simulator, and room mode.
 
-## Project Status (updated 2026-07-23)
+## Project Status (updated 2026-08-04)
 
 **Deployed**: frontend live at **https://kuji-lab.vercel.app** (Vercel, root dir `kuji-lab`, auto-deploys on push). Room server NOT yet deployed (Railway pending — room mode inactive in production). OAuth provider apps NOT yet registered for the production domain (social login fails in production until redirect URIs + env vars are set; see DEPLOYMENT.md).
 
@@ -24,6 +24,10 @@ All three planned phases are **implemented**: search/browse, solo simulator, and
 - 2 dead products (`godzilla_gold`, `godzilla_gold-2`) have placeholder titles and are hidden by the `BAD_TITLES` filter in `lib/data.ts`.
 
 **Recent feature work**: tiered draw effects (grade × rarity × hidden-gem figure detection, `simulator/effects.ts`) and a synthesized sound engine (shared AudioContext, reverb, drag riser, volume/mute persisted to localStorage, `simulator/sound.ts`).
+
+**Performance/SEO pass (2026-08-04)**: home page no longer ships all ~2,500 summaries in the RSC payload — it SSRs the first 24 (`HOME_PAGE_SIZE` in `lib/utils.ts`) and `ProductGrid` lazy-loads the full list from `/api/summaries` (CDN-cached; safe because data only changes via redeploy). Added `app/sitemap.ts` + `app/robots.ts`. Product pages are ISR-cached (`revalidate = 86400`) — the `?sim=` deep-link is parsed client-side in `ProductDetail` on mount, NOT via server `searchParams` (reading searchParams there would force dynamic rendering and kill ISR). `SimulatorModal` is loaded via `next/dynamic` (`ssr: false`). `jose` is a direct dependency. Gotcha learned: a value exported from a `'use client'` module becomes a client-reference proxy when imported by a Server Component — shared constants must live in `lib/`.
+
+**Improvement roadmap (from 2026-08-04 audit)**: P0 room-server security is REQUIRED before Railway deploy (dev-fallback `ROOM_TOKEN_SECRET` on both sides, unauthenticated `POST /room`, no rate limit, room-code collision fall-through in `room_manager.py`, `/health` doesn't ping Redis). P2 data reliability: weekly scrape commits with no schema validation or failure alerting; kujimap match threshold 0.45 risks silent wrong counts; ラストワン賞 pool inclusion actually diverges between `ticket_pool.py` (+1) and frontend `core.ts` (excluded) — needs a shared golden-vector test.
 
 ## Commands
 
