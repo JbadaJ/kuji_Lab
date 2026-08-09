@@ -8,7 +8,9 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+from redis_client import get_redis
 from routers import rooms, ws as ws_router
 from services import room_manager
 
@@ -75,4 +77,10 @@ app.include_router(ws_router.router)
 
 @app.get("/health")
 async def health():
-    return {"ok": True}
+    try:
+        await get_redis().ping()
+    except Exception:
+        return JSONResponse(
+            status_code=503, content={"ok": False, "redis": False}
+        )
+    return {"ok": True, "redis": True}

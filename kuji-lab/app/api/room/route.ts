@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { ROOM_SERVER_URL } from '@/lib/room'
+import { mintRoomToken } from '@/lib/roomToken'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -12,18 +13,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const body = await req.json()
-  const payload = {
-    ...body,
-    user_id: session.user.id,
-    user_name: session.user.name ?? 'Anonymous',
-    user_avatar: session.user.image ?? null,
+  let token: string
+  try {
+    token = await mintRoomToken({
+      sub: session.user.id,
+      name: session.user.name ?? 'Anonymous',
+      picture: session.user.image ?? null,
+    })
+  } catch {
+    return NextResponse.json(
+      { error: 'Room service misconfigured' },
+      { status: 500 }
+    )
   }
+
+  const body = await req.json()
 
   const res = await fetch(`${ROOM_SERVER_URL}/room`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
   })
 
   const data = await res.json()

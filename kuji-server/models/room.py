@@ -51,8 +51,10 @@ class CreateRoomRequest(BaseModel):
     price_yen: Optional[int] = None
     prizes: list[dict]   # raw Prize dicts from frontend
     draws_per_turn: int = 1
-    user_id: str
-    user_name: str
+    # Identity is derived from the signed auth token, not these fields; they are
+    # accepted for backward compatibility but ignored by the server.
+    user_id: Optional[str] = None
+    user_name: Optional[str] = None
     user_avatar: Optional[str] = None
 
 

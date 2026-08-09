@@ -16,22 +16,19 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from collections import Counter
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, status
-from jose import jwt, JWTError
 
 from models.messages import make_event
 from models.room import MemberInfo
 from services import room_manager
+from services.auth import verify_token
 
 router = APIRouter()
 
-SECRET = os.getenv("ROOM_TOKEN_SECRET", "dev-secret-change-in-prod")
-ALGORITHM = "HS256"
 TURN_TIMEOUT_SECONDS = 60
 
 # ── Connection registry ───────────────────────────────────────────────────────
@@ -62,15 +59,6 @@ async def _unicast(code: str, user_id: str, event: dict) -> None:
     ws = _get_ws(code, user_id)
     if ws:
         await _send(ws, event)
-
-
-# ── Auth helper ───────────────────────────────────────────────────────────────
-
-def _verify_token(token: str) -> Optional[dict]:
-    try:
-        return jwt.decode(token, SECRET, algorithms=[ALGORITHM])
-    except JWTError:
-        return None
 
 
 # ── Turn timeout ──────────────────────────────────────────────────────────────
@@ -138,7 +126,7 @@ async def room_ws(
     code = code.upper()
 
     # Verify token
-    claims = _verify_token(token)
+    claims = verify_token(token)
     if not claims:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return

@@ -31,6 +31,10 @@ def _key(code: str, part: str) -> str:
     return f"room:{code}:{part}"
 
 
+class RoomCodeAllocationError(RuntimeError):
+    """Raised when a unique room code could not be generated."""
+
+
 # ── Low-level Redis helpers ───────────────────────────────────────────────────
 
 async def _acquire_lock(code: str, timeout: int = 5) -> bool:
@@ -122,11 +126,18 @@ async def create_room(
     """Create a new room and return its code."""
     r = get_redis()
 
-    # Generate unique code
-    for _ in range(10):
-        code = generate_code()
-        if not await room_exists(code):
+    # Generate unique code — never fall through to a colliding code, which
+    # would silently overwrite an existing room.
+    code = None
+    for _ in range(20):
+        candidate = generate_code()
+        if not await room_exists(candidate):
+            code = candidate
             break
+    if code is None:
+        raise RoomCodeAllocationError(
+            "could not allocate a unique room code after 20 attempts"
+        )
 
     pool = build_pool(prizes)
     total_tickets = sum(pool.values())
